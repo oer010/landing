@@ -29,19 +29,33 @@
 
 .info{
     display: flex;
+    height: 220px;
     color: black;
     background-color: white;
     flex-direction: row;
-    justify-content: center;
+    justify-content: space-around;
+    
+    
 }
 
 .infoitem{
     border: 2px solid #3882F6;
     border-radius: 8px 8px 8px 8px;
-    height: 100px;
-    width: 100px;
-    padding: 10px;
+    padding: 50px;
     margin: 20px;
+}
+
+.quote{
+    display: flex;
+    
+    height: 150px;
+    justify-content: space-around;
+    background-color:#E5E7EB;
+    color: #1F2937;
+    padding: 30px;
+    font-size: 36px;
+    font-weight: bolder;
+ 
 }
 
 #buttontop{
@@ -49,6 +63,7 @@
     background-color: #3882F6;
     height: 30px;
     width: 100px;
+    border: 1px solid;
     border-radius: 8px 8px 8px 8px;
 }
 
