@@ -45,9 +45,40 @@
     margin: 20px;
 }
 
+.call{
+    display: flex;
+    background-color: #3882F6;
+    justify-content: center;
+    width: fit-content; 
+    padding: 15px;
+    border-radius: 8px 8px 8px 8px;
+
+
+}
+
+#text-call{
+
+}
+.fourbox{
+    display: flex;
+    justify-content: center;
+    padding: 50px;
+}
+#button-call{
+    margin: 30px;  
+}
+
+.end{
+   display: flex;
+   justify-content: center;
+   background-color: #1F2937;
+   color: #F9FAF8;
+}
+
+
+
 .quote{
     display: flex;
-    
     height: 150px;
     justify-content: space-around;
     background-color:#E5E7EB;
@@ -58,7 +89,7 @@
  
 }
 
-#buttontop{
+.buttontop{
     color:#F9FAF8;
     background-color: #3882F6;
     height: 30px;
@@ -72,14 +103,12 @@
     background-color: #E5E7EB;
     padding: 70px;
     height: 50px;
-    border-radius: 5px 5px 5px 5px;
-    
+    border-radius: 5px 5px 5px 5px;  
 }
 
 ul{
     list-style: none;
     display:flex;
-    
 }
 
  #list{
@@ -91,8 +120,7 @@ ul{
 
 #logo{
     font-size:24px;
-    padding-right: 170px;
-    
+    padding-right: 170px; 
 }
 
 h3{
