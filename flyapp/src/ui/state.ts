@@ -1,6 +1,7 @@
 import type { AeroDb, Airport, Navaid } from '../lib/data';
 import { distanceNm, parseCoordinate, type LatLon } from '../lib/geo';
 import type { Waypoint } from '../lib/navlog';
+import type { WindAloft } from '../lib/winds';
 import {
   DEFAULT_SETTINGS,
   defaultChecklists,
@@ -33,6 +34,17 @@ export interface RouteState {
   fuelOnBoard: number | null;
   persons: number;
   alternate: string;
+  /** Prognosevind per legg, gyldig bare så lenge `key` stemmer med ruten. */
+  forecast?: { key: string; fetchedAt: string; winds: (WindAloft | null)[] } | null;
+}
+
+/** Endres når rute, høyde eller avgangstid endres (da må vinden hentes på nytt). */
+export const forecastKey = (r: RouteState): string =>
+  JSON.stringify([r.waypoints.map((w) => [w.lat.toFixed(3), w.lon.toFixed(3)]), r.altitudeFt, r.departureTime]);
+
+/** Prognosevind for gjeldende rute, eller undefined om den mangler/er utdatert. */
+export function activeLegWinds(r: RouteState = state.route): (WindAloft | null)[] | undefined {
+  return r.forecast && r.forecast.key === forecastKey(r) ? r.forecast.winds : undefined;
 }
 
 type Events = 'route' | 'position' | 'settings' | 'aircraft' | 'tracks' | 'logbook' | 'checklists' | 'nav' | 'select';

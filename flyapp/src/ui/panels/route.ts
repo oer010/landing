@@ -1,4 +1,6 @@
-import { fmtHdg } from '../../lib/geo';
+import { fmtHdg, midpoint } from '../../lib/geo';
+import { fetchLegWinds } from '../../lib/winds';
+import type { Wind } from '../../lib/navlog';
 import { fmtVar } from '../../lib/mag';
 import { computeNavlog, fmtMin, fuelPlan, suggestVfrAltitude, vfrCruiseAltitudeOk, type NavlogLeg } from '../../lib/navlog';
 import { categoryOf, CATEGORY_COLORS, fetchMetars, wxError } from '../../lib/metar';
@@ -9,16 +11,18 @@ import { isNative } from '../../lib/platform';
 import { badge, clear, fmt, h, numField, section, textField, toast } from '../dom';
 import { fitRoute, isEditMode, setEditMode } from '../map';
 import { setActiveIndex, startSim, stopSim, simActive } from '../position';
-import { parseRouteString, routeToString, state } from '../state';
+import { activeLegWinds, forecastKey, parseRouteString, routeToString, state } from '../state';
 
 export function renderRoute(el: HTMLElement): void {
   const r = state.route;
   const ac = state.currentAircraft;
   const wps = r.waypoints;
   const dep = r.departureTime ? new Date(r.departureTime) : new Date();
+  const legWinds = activeLegWinds(r);
   const legs = computeNavlog(wps, {
     tas: ac.tas,
     wind: { dir: r.windDir, speed: r.windSpeed },
+    legWinds,
     fuelBurn: ac.fuelBurn,
     altitudeFt: r.altitudeFt,
     date: dep,
@@ -122,13 +126,12 @@ export function renderRoute(el: HTMLElement): void {
         { class: 'grid2' },
         numField('Marsjhøyde', r.altitudeFt, (v) => state.setRoute({ altitudeFt: v }), { step: 500, unit: 'ft' }),
         numField('Drivstoff om bord', fuelOnBoard, (v) => state.setRoute({ fuelOnBoard: v }), { unit: ac.fuelUnit }),
-        numField('Vind fra (rettv.)', r.windDir, (v) => state.setRoute({ windDir: v }), { step: 10, min: 0, max: 360, unit: '°' }),
-        numField('Vindstyrke', r.windSpeed, (v) => state.setRoute({ windSpeed: v }), { unit: 'kt' }),
         textField('Avgang (lokal tid)', r.departureTime, (v) => state.setRoute({ departureTime: v }), { type: 'datetime-local' }),
         numField('Personer om bord', r.persons, (v) => state.setRoute({ persons: v }), { min: 1, step: 1 }),
       ),
       h('p', { class: 'muted small' }, `TAS ${ac.tas} kt · forbruk ${ac.fuelBurn} ${ac.fuelUnit}/t (fra flyprofilen)`),
     ),
+    windSection(legs, dep),
   );
 
   if (legs.length) {
@@ -212,15 +215,16 @@ function navlogTable(legs: NavlogLeg[], fuelUnit: string): HTMLElement {
       h(
         'table',
         { class: 'navlog' },
-        h('thead', null, h('tr', null, ['Til', 'TC', 'Var', 'MC', 'WCA', 'MH', 'Dist', 'GS', 'ETE', 'Fuel', 'Σ tid'].map((c) => h('th', null, c)))),
+        h('thead', null, h('tr', null, ['Til', 'Vind', 'TC', 'Var', 'MC', 'WCA', 'MH', 'Dist', 'GS', 'ETE', 'Fuel', 'Σ tid'].map((c) => h('th', null, c)))),
         h(
           'tbody',
           null,
-          legs.map((l) =>
+          legs.map((l, i) =>
             h(
               'tr',
               null,
               h('td', { class: 'wp-id' }, l.to.id),
+              h('td', { title: windTitle(i) }, fmtWind(l.wind)),
               h('td', null, fmtHdg(l.tc)),
               h('td', null, fmtVar(l.variation)),
               h('td', { class: 'strong' }, fmtHdg(l.mc)),
@@ -236,7 +240,11 @@ function navlogTable(legs: NavlogLeg[], fuelUnit: string): HTMLElement {
         ),
       ),
     ),
-    h('p', { class: 'muted small' }, `Vinkler i grader, distanse i NM, fart i kt, drivstoff i ${fuelUnit}. Misvisning fra WMM2025.`),
+    h(
+      'p',
+      { class: 'muted small' },
+      `Vind (fra, rettvisende/kt) ${activeLegWinds() ? 'fra prognose per legg' : 'manuelt angitt'}. Vinkler i grader, distanse i NM, fart i kt, drivstoff i ${fuelUnit}. Misvisning fra WMM2025.`,
+    ),
   );
 }
 
@@ -253,6 +261,11 @@ async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFue
   else if (bad.length)
     warn(`Halvsirkelregelen: ${r.altitudeFt} ft passer ikke for legg ${bad.map((l) => `${l.to.id} (MC ${fmtHdg(l.mc)}° → ${suggestVfrAltitude(l.mc, r.altitudeFt)} ft)`).join(', ')}`);
   else ok(`Marsjhøyde ${r.altitudeFt} ft følger halvsirkelregelen`);
+
+  // Vind
+  if (r.forecast && !activeLegWinds()) warn('Ruten, høyden eller avgangstiden er endret etter at vinden ble hentet – hent prognosevind på nytt.');
+  else if (activeLegWinds()) ok(`Prognosevind per legg (hentet ${fmt.time(new Date(r.forecast!.fetchedAt))})`);
+  else warn('Navloggen bruker manuell vind – hent prognosevind for en realistisk plan.');
 
   // Drivstoff
   if (extraFuel < 0) warn(`For lite drivstoff: mangler ${(-extraFuel).toFixed(1)} ${state.currentAircraft.fuelUnit}`);
@@ -394,12 +407,12 @@ function printNavlog(legs: NavlogLeg[]): void {
     h(
       'p',
       null,
-      `${ac.registration} (${ac.icaoType}) · TAS ${ac.tas} kt · ${r.altitudeFt} ft · vind ${String(r.windDir).padStart(3, '0')}/${r.windSpeed} kt · ${fmt.date(new Date())}`,
+      `${ac.registration} (${ac.icaoType}) · TAS ${ac.tas} kt · ${r.altitudeFt} ft · vind ${activeLegWinds() ? `prognose (Open-Meteo, hentet ${fmt.time(new Date(r.forecast!.fetchedAt))})` : `${String(r.windDir).padStart(3, '0')}/${r.windSpeed} kt`} · ${fmt.date(new Date())}`,
     ),
     h(
       'table',
       null,
-      h('thead', null, h('tr', null, ['Fra', 'Til', 'MC', 'MH', 'Dist', 'GS', 'ETE', 'ETA', 'ATA', 'Fuel', 'Frekv./notat'].map((c) => h('th', null, c)))),
+      h('thead', null, h('tr', null, ['Fra', 'Til', 'Vind', 'MC', 'MH', 'Dist', 'GS', 'ETE', 'ETA', 'ATA', 'Fuel', 'Frekv./notat'].map((c) => h('th', null, c)))),
       h(
         'tbody',
         null,
@@ -409,6 +422,7 @@ function printNavlog(legs: NavlogLeg[]): void {
             null,
             h('td', null, l.from.id),
             h('td', null, l.to.id),
+            h('td', null, fmtWind(l.wind)),
             h('td', null, fmtHdg(l.mc)),
             h('td', null, l.mh === null ? '' : fmtHdg(l.mh)),
             h('td', null, l.dist.toFixed(1)),
@@ -429,4 +443,66 @@ function printNavlog(legs: NavlogLeg[]): void {
     const css = 'body{font-family:sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #000;padding:6px;font-size:12px}';
     download(`${slug(r.name)}-navlogg.html`, `<!doctype html><meta charset="utf-8"><title>${r.name}</title><style>${css}</style>${host.innerHTML}`, 'text/html');
   } else window.print();
+}
+
+const fmtWind = (w: Wind) => (w.speed < 0.5 ? 'stille' : `${fmtHdg(w.dir)}/${Math.round(w.speed)}`);
+
+function windTitle(i: number): string {
+  const w = activeLegWinds()?.[i];
+  return w ? `Prognose${w.tempC !== null ? `, ${w.tempC.toFixed(0)} °C` : ''}` : 'Manuell vind';
+}
+
+function windSection(legs: NavlogLeg[], dep: Date): HTMLElement {
+  const r = state.route;
+  const active = activeLegWinds(r);
+  const stale = r.forecast && !active;
+  const btn = h('button', { class: 'primary', disabled: r.waypoints.length < 2 }, '☁ Hent vind fra prognose');
+  btn.onclick = async () => {
+    btn.disabled = true;
+    btn.textContent = 'Henter …';
+    try {
+      // Midt i hvert legg, til tidspunktet vi er der.
+      const reqs = legs.map((l) => {
+        const before = (l.cumMin ?? 0) - (l.eteMin ?? 0) / 2;
+        return { point: midpoint(l.from, l.to), time: new Date(dep.getTime() + Math.max(0, before) * 60000) };
+      });
+      const winds = await fetchLegWinds(reqs, r.altitudeFt);
+      if (winds.every((w) => !w)) throw new Error('Prognosen dekker ikke avgangstidspunktet.');
+      state.setRoute({ forecast: { key: forecastKey(state.route), fetchedAt: new Date().toISOString(), winds } });
+      toast('Prognosevind lagt inn i navloggen');
+    } catch (e) {
+      toast((e as Error).message || 'Kunne ikke hente vind (offline?)', 'error', 7000);
+      btn.disabled = false;
+      btn.textContent = '☁ Hent vind fra prognose';
+    }
+  };
+  const temps = active?.map((w) => w?.tempC).filter((t): t is number => typeof t === 'number') ?? [];
+  return section(
+    'Vind i marsjhøyden',
+    h('div', { class: 'row wrap' }, btn, active ? h('button', { onclick: () => state.setRoute({ forecast: null }) }, 'Bruk manuell vind') : null),
+    active
+      ? h(
+          'p',
+          { class: 'small' },
+          `✓ Prognosevind per legg i ${r.altitudeFt} ft, for avgang ${fmt.time(dep)} (hentet ${fmt.time(new Date(r.forecast!.fetchedAt))}).`,
+          temps.length ? ` Temperatur i høyden ${fmtRange(temps)} °C.` : '',
+        )
+      : stale
+        ? h('p', { class: 'warnbox' }, 'Ruten, høyden eller avgangstiden er endret – hent vinden på nytt.')
+        : h('p', { class: 'muted small' }, 'Henter vind og temperatur fra værmodell (Open-Meteo) for hvert legg, i marsjhøyden og til tidspunktet du er der. Sett avgangstid først.'),
+    h(
+      'div',
+      { class: 'grid2' },
+      numField('Manuell vind fra (rettv.)', r.windDir, (v) => state.setRoute({ windDir: v }), { step: 10, min: 0, max: 360, unit: '°' }),
+      numField('Manuell vindstyrke', r.windSpeed, (v) => state.setRoute({ windSpeed: v }), { unit: 'kt' }),
+    ),
+    h('p', { class: 'muted small' }, active ? 'Manuell vind brukes bare for legg der prognosen mangler.' : 'Brukes for alle legg til prognosevind er hentet.'),
+  );
+}
+
+
+function fmtRange(v: number[]): string {
+  const lo = Math.round(Math.min(...v));
+  const hi = Math.round(Math.max(...v));
+  return lo === hi ? `${lo}` : `${lo} til ${hi}`;
 }

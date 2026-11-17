@@ -7,7 +7,7 @@ import { uid, type Track } from '../lib/store';
 import { Geolocation } from '@capacitor/geolocation';
 import { isNative } from '../lib/platform';
 import { toast } from './dom';
-import { state, type Position } from './state';
+import { activeLegWinds, state, type Position } from './state';
 
 let watchId: string | null = null;
 let gpsOn = false;
@@ -228,7 +228,8 @@ export function startSim(multiplier = 4): void {
     const leg = activeLeg();
     if (!leg) return stopSim();
     const tc = bearingTrue(pos, leg.to);
-    const sol = windTriangle(tc, ac.tas, { dir: state.route.windDir, speed: state.route.windSpeed });
+    const legWind = state.directTo ? null : activeLegWinds()?.[state.activeIndex - 1];
+    const sol = windTriangle(tc, ac.tas, legWind ?? { dir: state.route.windDir, speed: state.route.windSpeed });
     const gs = sol?.groundSpeed ?? ac.tas;
     const distStep = (gs * step * simSpeed) / 3600;
     const remaining = distanceNm(pos, leg.to);

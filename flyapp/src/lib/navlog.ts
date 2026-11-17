@@ -48,12 +48,15 @@ export interface NavlogParams {
   fuelBurn: number;
   altitudeFt: number;
   date?: Date;
+  /** Vind per legg (f.eks. fra prognose). Mangler et legg, brukes `wind`. */
+  legWinds?: (Wind | null | undefined)[];
 }
 
 export interface NavlogLeg {
   from: Waypoint;
   to: Waypoint;
   tc: number;
+  wind: Wind;
   variation: number;
   mc: number;
   wca: number | null;
@@ -80,7 +83,8 @@ export function computeNavlog(wps: Waypoint[], p: NavlogParams): NavlogLeg[] {
     const dist = distanceNm(from, to);
     const mid = { lat: (from.lat + to.lat) / 2, lon: (from.lon + to.lon) / 2 };
     const variation = declination(mid, p.date);
-    const sol = windTriangle(tc, p.tas, p.wind);
+    const wind = p.legWinds?.[i - 1] ?? p.wind;
+    const sol = windTriangle(tc, p.tas, wind);
     const eteMin = sol ? (dist / sol.groundSpeed) * 60 : null;
     const fuel = eteMin !== null ? (eteMin / 60) * p.fuelBurn : null;
     cumDist += dist;
@@ -90,6 +94,7 @@ export function computeNavlog(wps: Waypoint[], p: NavlogParams): NavlogLeg[] {
       from,
       to,
       tc,
+      wind,
       variation,
       mc: trueToMag(tc, variation),
       wca: sol?.wca ?? null,
