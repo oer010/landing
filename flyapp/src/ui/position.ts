@@ -11,6 +11,7 @@ import { state, type Position } from './state';
 
 let watchId: string | null = null;
 let gpsOn = false;
+let webWatchId: number | null = null;
 let lastGpsWarn = 0;
 let simTimer: number | null = null;
 let simSpeed = 1;
@@ -102,51 +103,97 @@ function setPosition(p: Position): void {
   state.emit('nav');
 }
 
+const DENIED_HELP =
+  'Posisjon er ikke tillatt. På iPhone: Innstillinger → Personvern og sikkerhet → Stedstjenester: slå på, og sett «Safari-nettsteder» til «Når appen er i bruk» (og slå på «Presis posisjon»). Last så appen inn på nytt.';
+
+interface Fix {
+  latitude: number;
+  longitude: number;
+  altitude?: number | null;
+  speed?: number | null;
+  course?: number | null;
+}
+
+let gotFix = false;
+
+function onFix(c: Fix, timestamp: number): void {
+  if (!gpsOn) return;
+  if (!gotFix) {
+    gotFix = true;
+    toast('GPS-posisjon funnet');
+  }
+  // iOS rapporterer -1 for ugyldig fart/kurs.
+  const speed = c.speed !== null && c.speed !== undefined && c.speed >= 0 ? c.speed : null;
+  // Bevegelsesretning (rettvisende), ikke kompass.
+  const course = c.course !== null && c.course !== undefined && c.course >= 0 && (speed ?? 0) > 1 ? c.course : null;
+  setPosition({
+    lat: c.latitude,
+    lon: c.longitude,
+    t: timestamp,
+    gsKt: speed !== null ? speed / 0.514444 : null,
+    trkTrue: course,
+    altFt: c.altitude !== null && c.altitude !== undefined ? c.altitude / 0.3048 : null,
+    source: 'gps',
+  });
+}
+
+function onGpsError(code: number | undefined, message: string): void {
+  if (code === 1) {
+    toast(DENIED_HELP, 'error', 15000);
+    stopGps();
+  } else if (Date.now() - lastGpsWarn > 30000) {
+    lastGpsWarn = Date.now();
+    toast(gotFix ? 'Svakt eller manglende GPS-signal' : `Venter på GPS-signal … ${message ? `(${message})` : ''}`, 'warn');
+  }
+}
+
 export function startGps(): void {
   if (gpsOn) return;
   stopSim();
   gpsOn = true;
+  gotFix = false;
   state.following = true;
   state.emit('nav');
+
+  if (!isNative()) {
+    // Nettleser: kall geolocation direkte i trykket, slik Safari forventer.
+    if (!('geolocation' in navigator) || !window.isSecureContext) {
+      toast('Denne nettleseren gir ikke tilgang til posisjon (krever https).', 'error', 8000);
+      stopGps();
+      return;
+    }
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        const c = pos.coords;
+        // I nettleseren er `heading` bevegelsesretningen.
+        onFix({ latitude: c.latitude, longitude: c.longitude, altitude: c.altitude, speed: c.speed, course: c.heading }, pos.timestamp);
+      },
+      (err) => onGpsError(err.code, err.message),
+      { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 },
+    );
+    webWatchId = id;
+    toast('GPS på – venter på posisjon …');
+    return;
+  }
+
   void (async () => {
     try {
-      if (isNative()) {
-        const perm = await Geolocation.requestPermissions({ permissions: ['location'] });
-        if (perm.location === 'denied') throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger → VFR Flyapp.');
-      }
-      const id = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 }, (pos, err) => {
-        if (err || !pos) {
-          // Kode 1 = tilgang avslått: stopp. Andre feil (signal borte, tidsavbrudd) er forbigående.
-          if ((err as { code?: number } | undefined)?.code === 1) {
-            toast('Posisjonstilgang avslått', 'error');
-            stopGps();
-          } else if (Date.now() - lastGpsWarn > 30000) {
-            lastGpsWarn = Date.now();
-            toast('Svakt eller manglende GPS-signal', 'warn');
-          }
-          return;
-        }
-        const c = pos.coords;
-        // iOS rapporterer -1 for ugyldig fart/kurs.
-        const speed = c.speed !== null && c.speed !== undefined && c.speed >= 0 ? c.speed : null;
-        // `course` er bevegelsesretningen (rettvisende); `heading` er kompasset.
-        const heading = c.course !== null && c.course !== undefined && c.course >= 0 && (speed ?? 0) > 1 ? c.course : null;
-        setPosition({
-          lat: c.latitude,
-          lon: c.longitude,
-          t: pos.timestamp,
-          gsKt: speed !== null ? speed / 0.514444 : null,
-          trkTrue: heading,
-          altFt: c.altitude !== null && c.altitude !== undefined ? c.altitude / 0.3048 : null,
-          source: 'gps',
-        });
+      const perm = await Geolocation.requestPermissions({ permissions: ['location'] });
+      if (perm.location === 'denied') throw Object.assign(new Error('denied'), { code: 1 });
+      const id = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 }, (pos, err) => {
+        if (err || !pos) return onGpsError((err as { code?: number } | undefined)?.code, err?.message ?? '');
+        onFix(pos.coords, pos.timestamp);
       });
       if (!gpsOn) await Geolocation.clearWatch({ id });
       else watchId = id;
-      toast('GPS på');
+      toast('GPS på – venter på posisjon …');
     } catch (e) {
-      toast(`GPS: ${(e as Error).message}`, 'error', 6000);
-      stopGps();
+      const code = (e as { code?: number }).code;
+      if (code === 1) onGpsError(1, '');
+      else {
+        toast(`GPS: ${(e as Error).message}`, 'error', 8000);
+        stopGps();
+      }
     }
   })();
 }
@@ -154,7 +201,9 @@ export function startGps(): void {
 export function stopGps(): void {
   gpsOn = false;
   if (watchId !== null) void Geolocation.clearWatch({ id: watchId });
+  if (webWatchId !== null) navigator.geolocation.clearWatch(webWatchId);
   watchId = null;
+  webWatchId = null;
   state.emit('nav');
 }
 
