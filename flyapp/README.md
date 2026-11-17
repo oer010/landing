@@ -1,7 +1,7 @@
 # VFR Flyapp
 
-En nettleserbasert flyapp i stil med ForeFlight og Garmin Pilot, avgrenset til **VFR-flyging**.
-Den kjører på mobil, nettbrett og PC og kan installeres som app (PWA) med offline-støtte.
+En iPhone-app (iOS, via Capacitor) i stil med ForeFlight og Garmin Pilot, avgrenset til **VFR-flyging**.
+Samme kode kjører også i nettleser (PWA) på iPad, Android og PC.
 
 > ⚠️ Kun for planlegging og situasjonsforståelse. **Ikke godkjent for navigasjon.**
 > Bruk alltid gjeldende AIP, VFR-kart, NOTAM og offisiell værbriefing.
@@ -26,7 +26,37 @@ Den kjører på mobil, nettbrett og PC og kan installeres som app (PWA) med offl
 
 All brukerdata lagres lokalt i nettleseren, og appen har ingen konto og ingen server-database.
 
-## Kom i gang
+## iPhone-app (iOS)
+
+Appen pakkes som en ekte iOS-app med [Capacitor](https://capacitorjs.com/). Xcode-prosjektet ligger i `ios/`.
+På iPhone bruker den native GPS (med tillatelsesdialog), holder skjermen våken under flyging,
+henter vær direkte fra aviationweather.gov og deler GPX/.fpl/navlogg via iOS-delingsarket
+(Filer, AirDrop, Garmin Pilot …). Langt trykk på kartet gir punktmeny.
+
+**Krever en Mac med Xcode 16 eller nyere** (iOS-apper kan ikke bygges på Linux/Windows).
+
+```bash
+cd flyapp
+npm ci
+npm run data      # flyplassdata (pakkes inn i appen og virker offline)
+npm run ios       # bygger webdelen, synkroniserer til ios/ og åpner Xcode
+```
+
+I Xcode:
+
+1. Velg **App**-targetet → *Signing & Capabilities* → velg ditt Team (Apple-ID).
+   Bytt gjerne *Bundle Identifier* (`no.vfrflyapp.app`) til noe du eier.
+2. Koble til iPhonen, velg den som mål og trykk ▶. Første gang må du godta utvikleren på
+   telefonen: *Innstillinger → Generelt → VPN og enhetsadministrasjon*.
+3. For TestFlight/App Store: *Product → Archive* → *Distribute App*. Krever betalt
+   Apple Developer-medlemskap.
+
+Med gratis Apple-ID kan appen kjøres på din egen telefon, men den må installeres på nytt hver 7. dag.
+Etter endringer i koden: `npm run ios:sync` (eller `npm run ios`).
+
+Ikon og oppstartsbilde lages fra `resources/icon-ios.svg` med `node resources/render.cjs`.
+
+## Kom i gang (nettleser)
 
 ```bash
 cd flyapp

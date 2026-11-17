@@ -5,6 +5,7 @@ import { categoryOf, CATEGORY_COLORS, fetchMetars } from '../../lib/metar';
 import { isNight, sunTimes } from '../../lib/sun';
 import { download, icaoFlightPlan, routeToFpl, routeToGpx } from '../../lib/export';
 import { uid } from '../../lib/store';
+import { isNative } from '../../lib/platform';
 import { badge, clear, fmt, h, numField, section, textField, toast } from '../dom';
 import { fitRoute, isEditMode, setEditMode } from '../map';
 import { setActiveIndex, startSim, stopSim, simActive } from '../position';
@@ -423,5 +424,9 @@ function printNavlog(legs: NavlogLeg[]): void {
     ),
     h('p', null, `Totalt ${legs[legs.length - 1].cumDist.toFixed(0)} NM · ${fmtMin(legs[legs.length - 1].cumMin)} · ${fmt.n(legs[legs.length - 1].cumFuel, 1)} ${ac.fuelUnit}`),
   );
-  window.print();
+  if (isNative()) {
+    // WKWebView kan ikke skrive ut direkte: del navloggen som HTML (kan skrives ut/lagres fra delingsarket).
+    const css = 'body{font-family:sans-serif}table{border-collapse:collapse;width:100%}td,th{border:1px solid #000;padding:6px;font-size:12px}';
+    download(`${slug(r.name)}-navlogg.html`, `<!doctype html><meta charset="utf-8"><title>${r.name}</title><style>${css}</style>${host.innerHTML}`, 'text/html');
+  } else window.print();
 }

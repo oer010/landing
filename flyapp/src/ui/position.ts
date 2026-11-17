@@ -4,15 +4,19 @@ import { bearingTrue, destination, distanceNm, type LatLon } from '../lib/geo';
 import { windTriangle, type Waypoint } from '../lib/navlog';
 import { nearestAirports } from '../lib/data';
 import { uid, type Track } from '../lib/store';
+import { Geolocation } from '@capacitor/geolocation';
+import { isNative } from '../lib/platform';
 import { toast } from './dom';
 import { state, type Position } from './state';
 
-let watchId: number | null = null;
+let watchId: string | null = null;
+let gpsOn = false;
+let lastGpsWarn = 0;
 let simTimer: number | null = null;
 let simSpeed = 1;
 let lastFix: Position | null = null;
 
-export const gpsActive = () => watchId !== null;
+export const gpsActive = () => gpsOn;
 export const simActive = () => simTimer !== null;
 
 export interface Leg {
@@ -99,38 +103,57 @@ function setPosition(p: Position): void {
 }
 
 export function startGps(): void {
-  if (!('geolocation' in navigator)) {
-    toast('Enheten har ikke GPS/posisjon', 'error');
-    return;
-  }
+  if (gpsOn) return;
   stopSim();
-  if (watchId !== null) return;
-  watchId = navigator.geolocation.watchPosition(
-    (pos) => {
-      const c = pos.coords;
-      setPosition({
-        lat: c.latitude,
-        lon: c.longitude,
-        t: pos.timestamp,
-        gsKt: c.speed !== null && !Number.isNaN(c.speed) ? c.speed / 0.514444 : null,
-        trkTrue: c.heading !== null && !Number.isNaN(c.heading) && (c.speed ?? 0) > 1 ? c.heading : null,
-        altFt: c.altitude !== null ? c.altitude / 0.3048 : null,
-        source: 'gps',
-      });
-    },
-    (err) => {
-      toast(`GPS-feil: ${err.message}`, 'error');
-      stopGps();
-    },
-    { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 },
-  );
+  gpsOn = true;
   state.following = true;
-  toast('GPS på');
   state.emit('nav');
+  void (async () => {
+    try {
+      if (isNative()) {
+        const perm = await Geolocation.requestPermissions({ permissions: ['location'] });
+        if (perm.location === 'denied') throw new Error('Posisjonstilgang er avslått. Slå den på i Innstillinger → VFR Flyapp.');
+      }
+      const id = await Geolocation.watchPosition({ enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 }, (pos, err) => {
+        if (err || !pos) {
+          // Kode 1 = tilgang avslått: stopp. Andre feil (signal borte, tidsavbrudd) er forbigående.
+          if ((err as { code?: number } | undefined)?.code === 1) {
+            toast('Posisjonstilgang avslått', 'error');
+            stopGps();
+          } else if (Date.now() - lastGpsWarn > 30000) {
+            lastGpsWarn = Date.now();
+            toast('Svakt eller manglende GPS-signal', 'warn');
+          }
+          return;
+        }
+        const c = pos.coords;
+        // iOS rapporterer -1 for ugyldig fart/kurs.
+        const speed = c.speed !== null && c.speed !== undefined && c.speed >= 0 ? c.speed : null;
+        // `course` er bevegelsesretningen (rettvisende); `heading` er kompasset.
+        const heading = c.course !== null && c.course !== undefined && c.course >= 0 && (speed ?? 0) > 1 ? c.course : null;
+        setPosition({
+          lat: c.latitude,
+          lon: c.longitude,
+          t: pos.timestamp,
+          gsKt: speed !== null ? speed / 0.514444 : null,
+          trkTrue: heading,
+          altFt: c.altitude !== null && c.altitude !== undefined ? c.altitude / 0.3048 : null,
+          source: 'gps',
+        });
+      });
+      if (!gpsOn) await Geolocation.clearWatch({ id });
+      else watchId = id;
+      toast('GPS på');
+    } catch (e) {
+      toast(`GPS: ${(e as Error).message}`, 'error', 6000);
+      stopGps();
+    }
+  })();
 }
 
 export function stopGps(): void {
-  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  gpsOn = false;
+  if (watchId !== null) void Geolocation.clearWatch({ id: watchId });
   watchId = null;
   state.emit('nav');
 }

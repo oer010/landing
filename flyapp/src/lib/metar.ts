@@ -1,4 +1,6 @@
-// METAR/TAF fra aviationweather.gov Data API, hentet via /awc-proxy.
+// METAR/TAF fra aviationweather.gov Data API (direkte i iPhone-appen, via /awc-proxy i nettleser).
+
+import { awcBase } from './platform';
 
 export type FlightCategory = 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNK';
 
@@ -118,7 +120,7 @@ const TTL = 5 * 60 * 1000;
 async function getJson<T>(path: string): Promise<T> {
   const hit = cache.get(path);
   if (hit && Date.now() - hit.t < TTL) return hit.data as T;
-  const res = await fetch(`./awc/api/data/${path}`);
+  const res = await fetch(`${awcBase()}${path}`);
   if (res.status === 204) return [] as T;
   if (!res.ok) throw new Error(`Værtjenesten svarte ${res.status}`);
   const data = (await res.json()) as T;

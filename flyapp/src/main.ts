@@ -5,6 +5,7 @@ import { initDatabar } from './ui/databar';
 import { fitRoute, initMap, map } from './ui/map';
 import { cancelDirectTo, gpsActive, simActive, startGps, startRecording, stopGps, stopRecording, stopSim } from './ui/position';
 import { state } from './ui/state';
+import { initNativeChrome, isNative, setKeepAwake } from './lib/platform';
 import { renderRoute } from './ui/panels/route';
 import { renderAirports } from './ui/panels/airports';
 import { renderWeather } from './ui/panels/weather';
@@ -176,31 +177,21 @@ async function main(): Promise<void> {
   document.addEventListener('open-panel', (e) => showPanel((e as CustomEvent<PanelId>).detail));
   disclaimer();
 
-  if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  void initNativeChrome();
+  if ('serviceWorker' in navigator && import.meta.env.PROD && !isNative()) {
     navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('SW', err));
   }
   // Hold skjermen våken mens GPS eller simulering er aktiv.
-  let wakeLock: { release: () => Promise<void> } | null = null;
-  const wake = async () => {
+  let awake = false;
+  const syncAwake = () => {
     const want = gpsActive() || simActive();
-    try {
-      if (want && !wakeLock) {
-        const nav = navigator as Navigator & { wakeLock?: { request: (t: 'screen') => Promise<{ release: () => Promise<void> }> } };
-        wakeLock = (await nav.wakeLock?.request('screen')) ?? null;
-      } else if (!want && wakeLock) {
-        await wakeLock.release();
-        wakeLock = null;
-      }
-    } catch {
-      wakeLock = null;
-    }
+    if (want === awake) return;
+    awake = want;
+    setKeepAwake(want).catch(() => (awake = false));
   };
-  state.on('nav', () => void wake());
+  state.on('nav', syncAwake);
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') {
-      wakeLock = null;
-      void wake();
-    }
+    if (document.visibilityState === 'visible' && awake) setKeepAwake(true).catch(() => undefined);
   });
   window.addEventListener('online', () => toast('Tilkoblet igjen'));
   window.addEventListener('offline', () => toast('Frakoblet – bruker lagrede data', 'warn'));

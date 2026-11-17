@@ -1,6 +1,7 @@
 // Eksport: GPX (rute og spor), Garmin .fpl og ICAO flightplan-tekst.
 
 import { formatIcaoCoord } from './geo';
+import { saveFile } from './platform';
 import type { Waypoint } from './navlog';
 import type { Aircraft, Track } from './store';
 
@@ -129,13 +130,5 @@ export function icaoFlightPlan(o: {
 }
 
 export function download(filename: string, content: string, type = 'application/octet-stream'): void {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  saveFile(filename, content, type).catch((e) => console.warn('Lagring/deling feilet', e));
 }

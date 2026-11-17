@@ -89,6 +89,36 @@ export function initMap(el: HTMLElement): L.Map {
     if (editMode) addRoutePoint(userWaypoint({ lat: e.latlng.lat, lon: e.latlng.lng }));
   });
   map.on('contextmenu', (e: L.LeafletMouseEvent) => showPointMenu({ lat: e.latlng.lat, lon: e.latlng.lng }));
+  // iOS sender ikke contextmenu ved langt trykk – egen deteksjon.
+  let pressTimer: number | undefined;
+  let pressStart: { x: number; y: number } | null = null;
+  el.addEventListener('touchstart', (ev) => {
+    if (ev.touches.length !== 1 || (ev.target as Element).closest('.leaflet-marker-icon, .leaflet-popup, .leaflet-control')) return;
+    const t = ev.touches[0];
+    pressStart = { x: t.clientX, y: t.clientY };
+    clearTimeout(pressTimer);
+    pressTimer = window.setTimeout(() => {
+      if (!pressStart) return;
+      const r = el.getBoundingClientRect();
+      const ll = map.containerPointToLatLng([pressStart.x - r.left, pressStart.y - r.top]);
+      pressStart = null;
+      navigator.vibrate?.(20);
+      showPointMenu({ lat: ll.lat, lon: ll.lng });
+    }, 600);
+  }, { passive: true });
+  el.addEventListener('touchmove', (ev) => {
+    const t = ev.touches[0];
+    if (pressStart && Math.hypot(t.clientX - pressStart.x, t.clientY - pressStart.y) > 10) {
+      pressStart = null;
+      clearTimeout(pressTimer);
+    }
+  }, { passive: true });
+  const cancelPress = () => {
+    pressStart = null;
+    clearTimeout(pressTimer);
+  };
+  el.addEventListener('touchend', cancelPress);
+  el.addEventListener('touchcancel', cancelPress);
 
   state.on('settings', applySettings);
   state.on('route', renderRoute);
