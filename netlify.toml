@@ -1,0 +1,22 @@
+# Publiserer VFR-flyappen (flyapp/) som webapp på Netlify.
+# Åpne den i Safari på iPhone og velg Del → «Legg til på Hjem-skjerm».
+
+[build]
+  base = "flyapp"
+  command = "npm run data && npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# aviationweather.gov sender ikke CORS-headere: Netlify videresender værkall.
+[[redirects]]
+  from = "/awc/*"
+  to = "https://aviationweather.gov/:splat"
+  status = 200
+  force = true
+
+[[headers]]
+  for = "/sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"

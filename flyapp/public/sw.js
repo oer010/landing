@@ -8,7 +8,7 @@ self.addEventListener('install', (e) => {
   e.waitUntil(
     caches
       .open(APP_CACHE)
-      .then((c) => c.addAll(['./', './index.html', './data/airports.json', './manifest.webmanifest', './icon.svg']))
+      .then((c) => c.addAll(['./', './index.html', './data/airports.json', './manifest.webmanifest', './icon.svg', './apple-touch-icon.png']))
       .then(() => self.skipWaiting()),
   );
 });

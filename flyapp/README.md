@@ -108,3 +108,14 @@ src/lib/                 ren logikk med tester: geodesi, navlogg, E6B, M&B, sol,
 src/ui/                  kart (Leaflet), posisjon/GPS/simulator, datastripe, paneler
 public/sw.js             service worker for offline app og kartfliser
 ```
+
+## Prøv på iPhone uten Mac (webapp)
+
+Repoet har `netlify.toml` i rotmappen, så appen kan publiseres gratis på Netlify. Netlify
+videresender også værkallene til aviationweather.gov.
+
+1. Logg inn på [app.netlify.com](https://app.netlify.com) med GitHub.
+2. *Add new project → Import an existing project → GitHub* → velg `landing`.
+3. Velg grenen som skal publiseres (`main` når PR-en er slått sammen). Innstillingene hentes fra `netlify.toml`, så trykk bare *Deploy*.
+4. Åpne adressen du får (`https://….netlify.app`) i **Safari** på iPhone → *Del* → *Legg til på Hjem-skjerm*.
+5. Start appen fra hjemskjermen og tillat posisjon når du trykker GPS.
