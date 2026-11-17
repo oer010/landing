@@ -1,14 +1,26 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Airport, Navaid } from '../lib/data';
-import { destination, midpoint, formatLatLon, type LatLon } from '../lib/geo';
-import { CATEGORY_COLORS, categoryOf, fetchMetarsInBox, type Metar } from '../lib/metar';
+import { bearingTrue, destination, distanceNm, fmtHdg, midpoint, formatLatLon, type LatLon } from '../lib/geo';
+import { CATEGORY_COLORS, categoryOf, fetchMetars, fetchMetarsInBox, metarAgeMin, type Metar } from '../lib/metar';
+import { AIRPORT_TYPE_TEXT } from '../lib/data';
+import { declination, fmtVar, trueToMag } from '../lib/mag';
+import { sunTimes } from '../lib/sun';
 import type { Waypoint } from '../lib/navlog';
-import { h } from './dom';
+import { badge, clear, fmt, h } from './dom';
 import { airportToWaypoint, navaidToWaypoint, state, userWaypoint } from './state';
 import { activeLeg, directTo } from './position';
 
 export let map: L.Map;
+
+// Hold boblen unna knappene til venstre (GPS/Følg/REC) og zoom-knappene nede til høyre.
+const POPUP_OPTS: L.PopupOptions & { maxHeight?: number } = {
+  maxWidth: 280,
+  minWidth: 220,
+  autoPanPaddingTopLeft: [76, 12],
+  autoPanPaddingBottomRight: [12, 12],
+  className: 'info-popup',
+};
 
 const BASE_LAYERS = {
   topo: () =>
@@ -39,7 +51,8 @@ let editMode = false;
 export const AIRPORT_COLORS = { towered: '#2563eb', untowered: '#c026d3' };
 
 export function initMap(el: HTMLElement): L.Map {
-  canvas = L.canvas({ padding: 0.3 });
+  // Større treffområde for fingre.
+  canvas = L.canvas({ padding: 0.3, tolerance: 10 });
   const last = (() => {
     try {
       return JSON.parse(localStorage.getItem('vfrapp.view') ?? 'null') as { c: [number, number]; z: number } | null;
@@ -49,10 +62,11 @@ export function initMap(el: HTMLElement): L.Map {
   })();
   map = L.map(el, {
     zoomControl: false,
-    preferCanvas: true,
+    // Én felles tegneflate: med flere legger den øverste seg over og tar alle trykk.
+    renderer: canvas,
     worldCopyJump: true,
   }).setView(last?.c ?? [60.5, 9.5], last?.z ?? 7);
-  L.control.zoom({ position: 'topright' }).addTo(map);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
   L.control.scale({ position: 'bottomleft', metric: true, imperial: false, maxWidth: 160 }).addTo(map);
   // Nautisk skala i tillegg.
   const NmScale = L.Control.Scale.extend({
@@ -69,8 +83,21 @@ export function initMap(el: HTMLElement): L.Map {
   metarLayer.setZIndex?.(1);
 
   applySettings();
+  // Mens en info-boble er åpen skal kartet ikke tegnes på nytt (det ville fjerne
+  // flyplassen boblen hører til, og boblen lukkes). Tegn når boblen lukkes.
+  let popupOpen = false;
+  let pendingRender = false;
+  map.on('popupopen', () => (popupOpen = true));
+  map.on('popupclose', () => {
+    popupOpen = false;
+    if (pendingRender) {
+      pendingRender = false;
+      renderAerodata();
+    }
+  });
   map.on('moveend', () => {
-    renderAerodata();
+    if (popupOpen) pendingRender = true;
+    else renderAerodata();
     scheduleMetars();
     try {
       const c = map.getCenter();
@@ -166,21 +193,108 @@ function airportVisible(a: Airport, z: number): boolean {
   return false;
 }
 
+const SURFACE: [RegExp, string][] = [
+  [/^(ASP|ASPH|BIT|TAR|PEM|MAC)/i, 'asfalt'],
+  [/^(CON|CONC|PAV)/i, 'betong'],
+  [/^(GRS|GRASS|TURF)/i, 'gress'],
+  [/^(GRV|GRAVEL|GRE)/i, 'grus'],
+  [/^(DIRT|SAND|SOIL|CLA)/i, 'jord/sand'],
+  [/^(WATER|WAT)/i, 'vann'],
+  [/^(SNOW|ICE)/i, 'snø/is'],
+];
+const surfaceText = (s: string) => SURFACE.find(([re]) => re.test(s))?.[1] ?? (s || 'ukjent dekke');
+
+const MORSE: Record<string, string> = {
+  A: '·−', B: '−···', C: '−·−·', D: '−··', E: '·', F: '··−·', G: '−−·', H: '····', I: '··', J: '·−−−', K: '−·−', L: '·−··', M: '−−',
+  N: '−·', O: '−−−', P: '·−−·', Q: '−−·−', R: '·−·', S: '···', T: '−', U: '··−', V: '···−', W: '·−−', X: '−··−', Y: '−·−−', Z: '−−··',
+  0: '−−−−−', 1: '·−−−−', 2: '··−−−', 3: '···−−', 4: '····−', 5: '·····', 6: '−····', 7: '−−···', 8: '−−−··', 9: '−−−−·',
+};
+const morse = (id: string) => id.toUpperCase().split('').map((c) => MORSE[c] ?? c).join('  ');
+
+/** Avstand og magnetisk kurs fra egen posisjon (om kjent). */
+function fromMe(p: LatLon): string | null {
+  const me = state.position;
+  if (!me) return null;
+  const d = declination(p);
+  return `${distanceNm(me, p).toFixed(1)} NM, kurs ${fmtHdg(trueToMag(bearingTrue(me, p), d))}° fra deg`;
+}
+
+/** Viktigst for VFR først. */
+const FREQ_ORDER = ['TWR', 'AFIS', 'A/G', 'INFO', 'CTAF', 'UNIC', 'ATIS', 'GND', 'APP', 'DEP'];
+const sortFreqs = (fs: Airport['freqs']) =>
+  [...fs].sort((x, y) => {
+    const ix = FREQ_ORDER.findIndex((t) => x.type.toUpperCase().includes(t));
+    const iy = FREQ_ORDER.findIndex((t) => y.type.toUpperCase().includes(t));
+    return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy);
+  });
+
+const row = (k: string, v: Node | string) => h('tr', null, h('th', null, k), h('td', null, v));
+
 export function airportPopup(a: Airport): HTMLElement {
-  const rwy = a.runways
-    .map((r) => `${r.le}/${r.he} ${r.lengthFt ? Math.round(r.lengthFt * 0.3048) + ' m' : ''} ${r.surface}`)
-    .join(', ');
-  const ctaf = a.freqs.find((f) => /TWR|AFIS|CTAF|A\/G|INFO|UNIC/i.test(f.type));
+  // Fast plass til METAR, så boblen ikke vokser etter at kartet har flyttet seg for å vise den.
+  const hasIcao = /^[A-Z]{4}$/.test(a.ident);
+  const wx = h('div', { class: 'popup-wx', style: hasIcao ? { minHeight: '92px' } : undefined }, hasIcao ? h('span', { class: 'p-muted' }, 'Henter METAR …') : null);
+  if (hasIcao)
+    fetchMetars([a.ident])
+      .then((ms) => {
+        const m = ms[0];
+        if (!m) return clear(wx, h('span', { class: 'p-muted' }, 'Ingen METAR for denne flyplassen.'));
+        const cat = categoryOf(m);
+        clear(
+          wx,
+          h('div', null, badge(cat, CATEGORY_COLORS[cat]), h('span', { class: 'p-muted' }, ` ${metarAgeMin(m)} min gammel`)),
+          h('div', { class: 'p-raw' }, m.rawOb),
+        );
+      })
+      .catch(() => clear(wx, h('span', { class: 'p-muted' }, 'Vær ikke tilgjengelig nå.')));
+  const sun = sunTimes(new Date(), a.lat, a.lon);
+  const me = fromMe(a);
   return h(
     'div',
     { class: 'popup' },
-    h('strong', null, `${a.ident} – ${a.name}`),
-    h('div', { class: 'muted' }, `Høyde ${a.elevFt ?? '—'} ft${ctaf?.mhz ? ` · ${ctaf.type} ${ctaf.mhz.toFixed(3)}` : ''}`),
-    rwy ? h('div', { class: 'muted small' }, rwy) : null,
+    h('div', { class: 'p-title' }, h('span', { class: 'p-id' }, a.ident), a.iata ? h('span', { class: 'p-muted' }, ` / ${a.iata}`) : null),
+    h('div', { class: 'p-name' }, a.name),
+    h('div', { class: 'p-muted' }, `${AIRPORT_TYPE_TEXT[a.type]} · ${a.towered ? 'kontrollert (TWR)' : 'ukontrollert'}${a.city ? ` · ${a.city}` : ''}`),
+    h(
+      'table',
+      { class: 'p-table' },
+      h(
+        'tbody',
+        null,
+        row('Høyde', `${a.elevFt ?? '—'} ft${a.elevFt !== null ? ` (${Math.round(a.elevFt * 0.3048)} m)` : ''}`),
+        a.runways.length
+          ? row(
+              'Bane',
+              h(
+                'div',
+                null,
+                a.runways.map((r) =>
+                  h('div', null, h('strong', null, `${r.le}/${r.he}`), ` ${r.lengthFt ? `${Math.round(r.lengthFt * 0.3048)} m` : ''} ${surfaceText(r.surface)}${r.lighted ? ', lys' : ''}`),
+                ),
+              ),
+            )
+          : null,
+        a.freqs.length
+          ? row(
+              'Frekv.',
+              h(
+                'div',
+                null,
+                sortFreqs(a.freqs)
+                  .slice(0, 5)
+                  .map((f) => h('div', null, h('strong', null, f.mhz?.toFixed(3) ?? '—'), ` ${f.type}`)),
+              ),
+            )
+          : row('Frekv.', 'Ingen i databasen – sjekk AIP'),
+        sun.polar === 'normal' ? row('Sol ned', `${fmt.time(sun.sunset)} (mørkt ${fmt.time(sun.civilDusk)})`) : null,
+        me ? row('Fra deg', me) : null,
+      ),
+    ),
+    wx,
     h(
       'div',
       { class: 'popup-actions' },
-      h('button', { onclick: () => (map.closePopup(), state.selectAirport(a)) }, 'Info'),
+      h('button', { class: 'p-primary', onclick: () => (map.closePopup(), state.selectAirport(a)) }, 'Mer info'),
       h('button', { onclick: () => (map.closePopup(), directTo(airportToWaypoint(a))) }, 'Direkte →'),
       h('button', { onclick: () => (map.closePopup(), addRoutePoint(airportToWaypoint(a))) }, '+ Rute'),
     ),
@@ -188,16 +302,32 @@ export function airportPopup(a: Airport): HTMLElement {
 }
 
 function navaidPopup(n: Navaid): HTMLElement {
-  const freq = n.freqKhz ? (n.type.startsWith('NDB') ? `${n.freqKhz} kHz` : `${(n.freqKhz / 1000).toFixed(2)} MHz`) : '';
+  const isNdb = n.type.startsWith('NDB');
+  const freq = n.freqKhz ? (isNdb ? `${n.freqKhz} kHz` : `${(n.freqKhz / 1000).toFixed(2)} MHz`) : '—';
+  const me = fromMe(n);
   return h(
     'div',
     { class: 'popup' },
-    h('strong', null, `${n.ident} – ${n.name}`),
-    h('div', { class: 'muted' }, `${n.type} ${freq}`),
+    h('div', { class: 'p-title' }, h('span', { class: 'p-id' }, n.ident), h('span', { class: 'p-muted' }, ` ${n.type}`)),
+    h('div', { class: 'p-name' }, n.name),
+    h(
+      'table',
+      { class: 'p-table' },
+      h(
+        'tbody',
+        null,
+        row('Frekvens', h('strong', null, freq)),
+        row('Morse', h('span', { class: 'p-morse' }, morse(n.ident))),
+        n.elevFt !== null ? row('Høyde', `${n.elevFt} ft`) : null,
+        row('Misvisning', fmtVar(declination(n))),
+        row('Posisjon', formatLatLon(n)),
+        me ? row('Fra deg', me) : null,
+      ),
+    ),
     h(
       'div',
       { class: 'popup-actions' },
-      h('button', { onclick: () => (map.closePopup(), directTo(navaidToWaypoint(n))) }, 'Direkte →'),
+      h('button', { class: 'p-primary', onclick: () => (map.closePopup(), directTo(navaidToWaypoint(n))) }, 'Direkte →'),
       h('button', { onclick: () => (map.closePopup(), addRoutePoint(navaidToWaypoint(n))) }, '+ Rute'),
     ),
   );
@@ -205,6 +335,8 @@ function navaidPopup(n: Navaid): HTMLElement {
 
 export function renderAerodata(): void {
   if (!map || !state.db) return;
+  // Boblen må få plass i kartet (rulles inni om den er høyere).
+  POPUP_OPTS.maxHeight = Math.max(180, map.getSize().y - 70);
   airportLayer.clearLayers();
   navaidLayer.clearLayers();
   const z = map.getZoom();
@@ -224,7 +356,7 @@ export function renderAerodata(): void {
         fillColor: a.type === 'W' ? '#fff' : color,
         fillOpacity: 1,
       })
-        .bindPopup(() => airportPopup(a))
+        .bindPopup(() => airportPopup(a), POPUP_OPTS)
         .addTo(airportLayer);
       if (a.type === 'W') m.setStyle({ color });
       if (labels) m.bindTooltip(a.ident, { permanent: true, direction: 'right', offset: [6, 0], className: 'ap-label' });
@@ -254,7 +386,7 @@ export function renderAerodata(): void {
         }),
         keyboard: false,
       })
-        .bindPopup(() => navaidPopup(n))
+        .bindPopup(() => navaidPopup(n), POPUP_OPTS)
         .addTo(navaidLayer);
     }
   }
@@ -296,9 +428,9 @@ function drawMetar(m: Metar): void {
     weight: 3,
     fill: false,
     opacity: 0.95,
-  })
-    .bindPopup(h('div', { class: 'popup' }, h('strong', null, `${m.icaoId} · ${cat}`), h('pre', { class: 'raw' }, m.rawOb)))
-    .addTo(metarLayer);
+    // Ringen skal ikke ta trykket – flyplassens boble viser METAR.
+    interactive: false,
+  }).addTo(metarLayer);
 }
 
 // ---------- Rute ----------
@@ -381,7 +513,7 @@ function renderRoute(): void {
       h(
         'div',
         { class: 'popup' },
-        h('strong', null, `${i + 1}. ${w.id}`),
+        h('div', { class: 'p-title' }, `${i + 1}. ${w.id}`),
         w.name ? h('div', { class: 'muted' }, w.name) : null,
         h('div', { class: 'muted small' }, formatLatLon(w)),
         h(
@@ -516,7 +648,7 @@ function showPointMenu(p: LatLon): void {
       h(
         'div',
         { class: 'popup' },
-        h('strong', null, 'Punkt'),
+        h('div', { class: 'p-title' }, 'Punkt'),
         h('div', { class: 'muted small' }, formatLatLon(p)),
         h(
           'div',

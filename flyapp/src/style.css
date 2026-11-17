@@ -258,11 +258,28 @@ svg.envelope .pt.bad { fill: var(--bad); stroke: #fff; }
 
 /* ---------- Kartsymboler ---------- */
 .leaflet-container { font: inherit; }
-.leaflet-popup-content-wrapper, .leaflet-popup-tip { background: var(--panel); color: var(--text); }
-.leaflet-popup-content { margin: 10px 12px; }
-.popup strong { display: block; margin-bottom: 2px; }
-.popup-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
-.popup-actions button { min-height: 34px; padding: 4px 10px; }
+/* Info-bobler på kartet: lys bakgrunn, mørk tekst, høy kontrast (lesbart i sollys). */
+.leaflet-container .leaflet-popup-content-wrapper,
+.leaflet-container .leaflet-popup-tip { background: #ffffff; color: #0f172a; box-shadow: 0 6px 24px rgb(0 0 0 / 0.45); }
+.leaflet-container .leaflet-popup-content-wrapper { border-radius: 12px; }
+.leaflet-container .leaflet-popup-content { margin: 12px 14px; font-size: 15px; line-height: 1.4; color: #0f172a; }
+.leaflet-container .leaflet-popup a.leaflet-popup-close-button { color: #0f172a; font: 700 28px/40px system-ui, sans-serif; width: 44px; height: 44px; top: 2px; right: 2px; }
+.popup, .popup * { color: #0f172a; }
+.popup .p-title { font-size: 20px; font-weight: 800; padding-right: 22px; }
+.popup .p-id { font-family: ui-monospace, monospace; }
+.popup .p-name { font-weight: 600; margin: 1px 0 2px; }
+.popup .p-muted, .popup .muted { color: #475569; font-size: 13px; }
+.popup strong { font-weight: 700; }
+.popup table.p-table { width: 100%; margin: 8px 0 4px; border-collapse: collapse; font-size: 14px; }
+.popup table.p-table th { text-align: left; vertical-align: top; color: #475569; font-weight: 600; font-size: 12px; text-transform: none; padding: 3px 8px 3px 0; white-space: nowrap; }
+.popup table.p-table td { padding: 3px 0; border-bottom: 1px solid #e2e8f0; }
+.popup .p-morse { font-size: 18px; letter-spacing: 1px; font-weight: 700; }
+.popup .popup-wx { margin-top: 6px; }
+.popup .p-raw, .popup pre.raw { font-family: ui-monospace, monospace; font-size: 12px; background: #f1f5f9; color: #0f172a; border-radius: 6px; padding: 6px 8px; margin: 4px 0 0; white-space: pre-wrap; word-break: break-word; }
+.popup .badge { color: #000; }
+.popup-actions { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.popup .popup-actions button { min-height: 40px; padding: 6px 12px; background: #e2e8f0; color: #0f172a; border: 1px solid #94a3b8; border-radius: 8px; font-weight: 600; }
+.popup .popup-actions button.p-primary { background: #1d4ed8; border-color: #1d4ed8; color: #ffffff; }
 .leaflet-tooltip.ap-label { line-height: 1.3; }
 .leaflet-tooltip.ap-label { background: rgb(255 255 255 / 0.8); border: none; box-shadow: none; color: #111; font-weight: 700; font-size: 11px; padding: 0 3px; border-radius: 3px; }
 .leaflet-tooltip.ap-label::before { display: none; }
