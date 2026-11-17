@@ -1,0 +1,13 @@
+{
+  "name": "VFR Flyapp",
+  "short_name": "VFR",
+  "description": "Kart, ruteplanlegging, vær, masse og balanse og E6B for VFR-flyging",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "lang": "nb",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
