@@ -1,7 +1,7 @@
 import { AIRPORT_TYPE_TEXT, ftToM, nearestAirports, searchAirports, type Airport } from '../../lib/data';
 import { bearingTrue, distanceNm, fmtHdg, formatLatLon, norm360 } from '../../lib/geo';
 import { declination, fmtVar, trueToMag } from '../../lib/mag';
-import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin } from '../../lib/metar';
+import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin, wxError } from '../../lib/metar';
 import { windComponents } from '../../lib/navlog';
 import { sunTimes } from '../../lib/sun';
 import { badge, clear, fmt, h, section } from '../dom';
@@ -183,7 +183,7 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
           t ? [h('h4', null, 'TAF'), h('pre', { class: 'raw' }, t.rawTAF)] : null,
         );
       })
-      .catch(() => clear(wxBox, h('p', { class: 'muted' }, 'Kunne ikke hente vær (offline?).')));
+      .catch((e) => clear(wxBox, h('p', { class: 'muted' }, wxError(e))));
   } else clear(wxBox, h('p', { class: 'muted' }, 'Ingen ICAO-kode, ingen METAR.'));
 }
 

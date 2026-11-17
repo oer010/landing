@@ -1,4 +1,4 @@
-import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin, type FlightCategory } from '../../lib/metar';
+import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin, type FlightCategory, wxError } from '../../lib/metar';
 import { load, save } from '../../lib/store';
 import { badge, clear, h, section, toast } from '../dom';
 import { state } from '../state';
@@ -99,7 +99,7 @@ export function renderWeather(el: HTMLElement): void {
         }),
       );
     })
-    .catch(() => clear(list, h('p', { class: 'muted' }, 'Kunne ikke hente vær (offline?).')));
+    .catch((e) => clear(list, h('p', { class: 'muted' }, wxError(e))));
 }
 
 const link = (href: string, text: string) => h('li', null, h('a', { href, target: '_blank', rel: 'noopener' }, text));

@@ -1,7 +1,7 @@
 import { fmtHdg } from '../../lib/geo';
 import { fmtVar } from '../../lib/mag';
 import { computeNavlog, fmtMin, fuelPlan, suggestVfrAltitude, vfrCruiseAltitudeOk, type NavlogLeg } from '../../lib/navlog';
-import { categoryOf, CATEGORY_COLORS, fetchMetars } from '../../lib/metar';
+import { categoryOf, CATEGORY_COLORS, fetchMetars, wxError } from '../../lib/metar';
 import { isNight, sunTimes } from '../../lib/sun';
 import { download, icaoFlightPlan, routeToFpl, routeToGpx } from '../../lib/export';
 import { uid } from '../../lib/store';
@@ -288,8 +288,8 @@ async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFue
       items.push(li);
     }
     if (!metars.length) items.push(h('li', { class: 'muted' }, 'Ingen METAR for flyplassene i ruten'));
-  } catch {
-    items.push(h('li', { class: 'muted' }, 'Kunne ikke hente vær (offline?)'));
+  } catch (e) {
+    items.push(h('li', { class: 'muted' }, wxError(e)));
   }
   items.push(h('li', { class: 'muted' }, 'Husk NOTAM, luftromsstatus og GAMET/LLF på ippc.no / AIM Norge.'));
   clear(ul, items);

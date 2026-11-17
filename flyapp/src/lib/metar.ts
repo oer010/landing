@@ -122,6 +122,8 @@ async function getJson<T>(path: string): Promise<T> {
   if (hit && Date.now() - hit.t < TTL) return hit.data as T;
   const res = await fetch(`${awcBase()}${path}`);
   if (res.status === 204) return [] as T;
+  if (res.status === 404 || res.status === 405 || !(res.headers.get('content-type') ?? '').includes('json'))
+    throw new Error('Vær er ikke tilgjengelig i denne versjonen (krever værproxy – se README)');
   if (!res.ok) throw new Error(`Værtjenesten svarte ${res.status}`);
   const data = (await res.json()) as T;
   cache.set(path, { t: Date.now(), data });
@@ -137,3 +139,7 @@ export const fetchTafs = (ids: string[]) =>
 /** bbox: sør, vest, nord, øst */
 export const fetchMetarsInBox = (s: number, w: number, n: number, e: number) =>
   getJson<Metar[]>(`metar?bbox=${[s, w, n, e].map((v) => v.toFixed(2)).join(',')}&format=json`);
+
+/** Brukervennlig feiltekst for værhenting. */
+export const wxError = (e: unknown): string =>
+  e instanceof Error && e.message.startsWith('Vær er ikke') ? e.message : 'Kunne ikke hente vær (offline?)';
