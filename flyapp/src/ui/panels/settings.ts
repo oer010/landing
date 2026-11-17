@@ -1,4 +1,6 @@
-import { h, section, textField, numField, toast } from '../dom';
+import { h, section, numField } from '../dom';
+import { airacAgeDays } from '../../lib/airspace';
+import { getAirspaceDb } from '../map';
 import { state } from '../state';
 
 export function renderSettings(el: HTMLElement): void {
@@ -27,20 +29,21 @@ export function renderSettings(el: HTMLElement): void {
       check('Flyplasser', 'showAirports'),
       check('Navaids (VOR/NDB)', 'showNavaids'),
       check('METAR-farger', 'showMetars'),
-      check('Luftrom (openAIP, krever nøkkel)', 'showAirspace'),
+      check('Luftrom (Norge, fra AIP)', 'showAirspace'),
       numField('Fartsvektor', s.vectorMin, (v) => state.updateSettings({ vectorMin: v }), { unit: 'min', min: 1, max: 30 }),
     ),
     section(
-      'Luftrom fra openAIP',
-      h(
-        'p',
-        { class: 'muted small' },
-        'Luftrom, kontrollsoner og restriksjonsområder tegnes som et kartlag fra openAIP. Lag en gratis konto på openaip.net, opprett en API-nøkkel og lim den inn her. Nøkkelen lagres bare i denne nettleseren.',
-      ),
-      textField('openAIP API-nøkkel', s.openAipKey, (v) => {
-        state.updateSettings({ openAipKey: v.trim() });
-        toast(v.trim() ? 'Luftromslag aktivert' : 'Luftromslag av');
-      }, { type: 'password', autocomplete: 'off', placeholder: 'lim inn nøkkel' }),
+      'Luftrom',
+      (() => {
+        const db = getAirspaceDb();
+        if (!db) return h('p', { class: 'warnbox' }, 'Luftromsdata mangler i denne versjonen.');
+        const age = airacAgeDays(db.airac);
+        return h(
+          'p',
+          { class: age > 28 ? 'warnbox' : 'muted small' },
+          `${db.airspaces.length} norske luftrom fra AIP Norge (AIRAC ${db.airac}${age > 28 ? `, ${age} dager gammelt` : ''}), konvertert av luftrom.info (relet/pg-xc). Trykk på kartet for å se luftrommene over et punkt. Uten ansvar – sjekk alltid gjeldende AIP, VFR-kart og NOTAM.`,
+        );
+      })(),
     ),
     section(
       'Data',
@@ -67,7 +70,7 @@ export function renderSettings(el: HTMLElement): void {
         'Kun for VFR-planlegging og situasjonsforståelse. Ikke godkjent for navigasjon. Data kan være feil eller utdaterte – bruk alltid gjeldende AIP, VFR-kart, NOTAM og offisiell værbriefing.',
       ),
       h('p', { class: 'muted small' }, `Versjon: ${__BUILD__}`),
-      h('p', { class: 'muted small' }, 'Kart © OpenStreetMap-bidragsytere og OpenTopoMap. Vær: aviationweather.gov. Misvisning: NOAA World Magnetic Model 2025.'),
+      h('p', { class: 'muted small' }, 'Kart © OpenStreetMap-bidragsytere og OpenTopoMap. Luftrom: AIP Norge via luftrom.info. Vær: aviationweather.gov / MET Norge. Vind: Open-Meteo. Misvisning: NOAA World Magnetic Model 2025.'),
     ),
   );
 }

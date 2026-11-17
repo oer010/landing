@@ -1,5 +1,6 @@
 import { fmtHdg, midpoint } from '../../lib/geo';
 import { fetchLegWinds } from '../../lib/winds';
+import { airacAgeDays, airspacesAlongRoute, fmtLimits, KIND_ADVICE, KIND_STYLE } from '../../lib/airspace';
 import type { Wind } from '../../lib/navlog';
 import { fmtVar } from '../../lib/mag';
 import { computeNavlog, fmtMin, fuelPlan, suggestVfrAltitude, vfrCruiseAltitudeOk, type NavlogLeg } from '../../lib/navlog';
@@ -9,7 +10,7 @@ import { download, icaoFlightPlan, routeToFpl, routeToGpx } from '../../lib/expo
 import { uid } from '../../lib/store';
 import { isNative } from '../../lib/platform';
 import { badge, clear, fmt, h, numField, section, textField, toast } from '../dom';
-import { fitRoute, isEditMode, setEditMode } from '../map';
+import { fitRoute, getAirspaceDb, isEditMode, setEditMode } from '../map';
 import { setActiveIndex, startSim, stopSim, simActive } from '../position';
 import { activeLegWinds, forecastKey, parseRouteString, routeToString, state } from '../state';
 
@@ -261,6 +262,34 @@ async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFue
   else if (bad.length)
     warn(`Halvsirkelregelen: ${r.altitudeFt} ft passer ikke for legg ${bad.map((l) => `${l.to.id} (MC ${fmtHdg(l.mc)}° → ${suggestVfrAltitude(l.mc, r.altitudeFt)} ft)`).join(', ')}`);
   else ok(`Marsjhøyde ${r.altitudeFt} ft følger halvsirkelregelen`);
+
+  // Luftrom langs ruten i marsjhøyden
+  const asDb = getAirspaceDb();
+  if (asDb) {
+    const along = airspacesAlongRoute(asDb, wps, r.altitudeFt);
+    const age = airacAgeDays(asDb.airac);
+    if (!along.length) ok(`Ingen kontrollert/spesielt luftrom langs ruten i ${r.altitudeFt} ft (utenom start/landing).`);
+    for (const { airspace: a, atNm } of along) {
+      const li = h(
+        'li',
+        { class: ['SPORT', 'TIA'].includes(a.kind) ? 'ok' : 'warn' },
+        h('span', { class: 'as-dot', style: { background: KIND_STYLE[a.kind].color } }),
+        ` ${atNm.toFixed(0)} NM: `,
+        h('strong', null, a.n),
+        ` (${a.c.length === 1 ? `klasse ${a.c}, ` : ''}${fmtLimits(a)}) – ${KIND_ADVICE[a.kind]}`,
+        a.f ? ` · ${a.f.replace(/\s*MHZ/i, ' MHz')}` : '',
+        a.notam || a.amc ? ' · aktiveres ved NOTAM/AMC' : '',
+      );
+      items.push(li);
+    }
+    items.push(
+      h(
+        'li',
+        { class: age > 28 ? 'warn' : 'muted' },
+        `Luftromsdata: AIRAC ${asDb.airac}${age > 28 ? ` (${age} dager gammelt – sjekk gjeldende AIP/VFR-kart)` : ''}. Gjelder marsjhøyden; stig/sink nær flyplasser vurderes ikke.`,
+      ),
+    );
+  }
 
   // Vind
   if (r.forecast && !activeLegWinds()) warn('Ruten, høyden eller avgangstiden er endret etter at vinden ble hentet – hent prognosevind på nytt.');

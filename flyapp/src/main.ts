@@ -19,14 +19,14 @@ import { renderSettings } from './ui/panels/settings';
 type PanelId = 'route' | 'airports' | 'weather' | 'aircraft' | 'tools' | 'logbook' | 'checklists' | 'settings';
 
 const PANELS: Record<PanelId, { title: string; tab: string; icon: string; render: (el: HTMLElement) => void; events: Parameters<typeof state.on>[0][] }> = {
-  route: { title: 'Rute og navlogg', tab: 'Rute', icon: '⟋', render: renderRoute, events: ['route', 'aircraft'] },
+  route: { title: 'Rute og navlogg', tab: 'Rute', icon: '⟋', render: renderRoute, events: ['route', 'aircraft', 'airspace'] },
   airports: { title: 'Flyplasser', tab: 'Plasser', icon: '◎', render: renderAirports, events: ['select'] },
   weather: { title: 'Vær', tab: 'Vær', icon: '☁', render: renderWeather, events: ['route'] },
   aircraft: { title: 'Fly, masse og balanse', tab: 'Fly', icon: '✈', render: renderAircraft, events: ['aircraft'] },
   tools: { title: 'E6B og verktøy', tab: 'E6B', icon: '⊕', render: renderTools, events: [] },
   logbook: { title: 'Spor og loggbok', tab: 'Logg', icon: '☰', render: renderLogbook, events: ['tracks', 'logbook'] },
   checklists: { title: 'Sjekklister', tab: 'Sjekk', icon: '✓', render: renderChecklists, events: ['checklists'] },
-  settings: { title: 'Innstillinger', tab: 'Mer', icon: '⚙', render: renderSettings, events: ['settings'] },
+  settings: { title: 'Innstillinger', tab: 'Mer', icon: '⚙', render: renderSettings, events: ['settings', 'airspace'] },
 };
 
 let openPanel: PanelId | null = null;

@@ -10,7 +10,7 @@ Samme kode kjører også i nettleser (PWA) på iPad, Android og PC.
 
 | Område | Innhold |
 | --- | --- |
-| **Kart** | Topografisk/OSM-bakgrunn, flyplasser (blå = TWR, magenta = ukontrollert), VOR/NDB, METAR-farger (VFR/MVFR/IFR/LIFR), luftrom fra openAIP (valgfri nøkkel), rullebaner ved høy zoom, NM-skala |
+| **Kart** | Topografisk/OSM-bakgrunn, flyplasser (blå = TWR, magenta = ukontrollert), VOR/NDB, METAR-farger (VFR/MVFR/IFR/LIFR), norsk luftrom med høydegrenser, rullebaner ved høy zoom, NM-skala |
 | **Moving map** | GPS-posisjon, flysymbol, fartsvektor, sporlinje, «følg fly», datastripe (GS, TRK, ALT, neste, DIS, BRG, ETE, ETA, XTK, gjenstående) |
 | **Rute** | Skriv rute som tekst (`ENKJ GRM 6030N00930E ENBR`), rediger på kartet, gummistrikk-innsetting, dra og snap til flyplass/navaid, snu, lagre ruter, Direkte-til |
 | **Navlogg** | TC, misvisning (WMM2025), MC, vindkorreksjon, MH, distanse, GS, ETE, drivstoff, kumulativ tid; utskrift |
@@ -87,17 +87,20 @@ webserveren gjøre det samme, for eksempel i nginx:
 location /awc/ { proxy_pass https://aviationweather.gov/; proxy_set_header Host aviationweather.gov; }
 ```
 
-### Luftrom (valgfritt)
+### Luftrom
 
-Under **Mer → Luftrom fra openAIP** kan du lime inn en gratis API-nøkkel fra
-[openaip.net](https://www.openaip.net/). Nøkkelen lagres bare i nettleseren.
+`npm run data` henter norsk luftrom (CTR, TMA/CTA, TIZ/TIA, RMZ/TMZ, restriksjons- og
+fareområder) og legger det i `public/data/airspace.json`. Trykk på kartet for å se
+luftrommene over et punkt; rutesjekken lister luftrom langs ruten i marsjhøyden.
+AIRAC-datoen vises i appen, med advarsel når dataene er eldre enn én syklus (28 dager).
 
 ## Datakilder og lisenser
 
 - Flyplasser, rullebaner, frekvenser og navaids: [OurAirports](https://ourairports.com/data/) (public domain)
 - Kart: © OpenStreetMap-bidragsytere, OpenTopoMap (CC-BY-SA)
 - Vær: [aviationweather.gov Data API](https://aviationweather.gov/data/api/)
-- Luftrom: [openAIP](https://www.openaip.net/) (CC BY-NC 4.0)
+- Luftrom: AIP Norge, konvertert av [luftrom.info / relet/pg-xc](https://github.com/relet/pg-xc) (uten ansvar – sjekk gjeldende AIP og NOTAM). Hentes av `npm run data`.
+- Vind i høyden: [Open-Meteo](https://open-meteo.com/). METAR/TAF uten proxy: [MET Norge](https://api.met.no/)
 - Misvisning: NOAA World Magnetic Model 2025 (via `geomagnetism`)
 
 ## Struktur

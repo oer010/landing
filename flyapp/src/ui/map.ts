@@ -6,6 +6,7 @@ import { CATEGORY_COLORS, categoryOf, fetchMetars, fetchMetarsInBox, metarAgeMin
 import { AIRPORT_TYPE_TEXT } from '../lib/data';
 import { declination, fmtVar, trueToMag } from '../lib/mag';
 import { sunTimes } from '../lib/sun';
+import { airspacesAt, fmtLimits, KIND_ADVICE, KIND_STYLE, KIND_TEXT, loadAirspace, type AirspaceDb, type AirspaceKind } from '../lib/airspace';
 import type { Waypoint } from '../lib/navlog';
 import { badge, clear, fmt, h } from './dom';
 import { airportToWaypoint, navaidToWaypoint, state, userWaypoint } from './state';
@@ -37,7 +38,8 @@ const BASE_LAYERS = {
 };
 
 let baseLayer: L.TileLayer | null = null;
-let airspaceLayer: L.TileLayer | null = null;
+const airspaceLayer = L.layerGroup();
+let asDb: AirspaceDb | null = null;
 const airportLayer = L.layerGroup();
 const navaidLayer = L.layerGroup();
 const metarLayer = L.layerGroup();
@@ -78,7 +80,7 @@ export function initMap(el: HTMLElement): L.Map {
   });
   new (NmScale as unknown as new (o: L.Control.ScaleOptions) => L.Control)({ position: 'bottomleft', imperial: false, maxWidth: 160 }).addTo(map);
 
-  for (const l of [airportLayer, navaidLayer, metarLayer, routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
+  for (const l of [airspaceLayer, airportLayer, navaidLayer, metarLayer, routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
   // METAR-sirkler under flyplassene.
   metarLayer.setZIndex?.(1);
 
@@ -113,7 +115,15 @@ export function initMap(el: HTMLElement): L.Map {
     }
   });
   map.on('click', (e: L.LeafletMouseEvent) => {
-    if (editMode) addRoutePoint(userWaypoint({ lat: e.latlng.lat, lon: e.latlng.lng }));
+    const p = { lat: e.latlng.lat, lon: e.latlng.lng };
+    if (editMode) addRoutePoint(userWaypoint(p));
+    else showAirspacesAt(p);
+  });
+  map.on('zoomend', updateAirspaceLabels);
+  loadAirspace().then((db) => {
+    asDb = db;
+    state.emit('airspace');
+    renderAirspace();
   });
   map.on('contextmenu', (e: L.LeafletMouseEvent) => showPointMenu({ lat: e.latlng.lat, lon: e.latlng.lng }));
   // iOS sender ikke contextmenu ved langt trykk – egen deteksjon.
@@ -169,16 +179,7 @@ function applySettings(): void {
   if (baseLayer) baseLayer.remove();
   baseLayer = BASE_LAYERS[s.baseLayer]().addTo(map);
   baseLayer.bringToBack();
-  if (airspaceLayer) {
-    airspaceLayer.remove();
-    airspaceLayer = null;
-  }
-  if (s.showAirspace && s.openAipKey) {
-    airspaceLayer = L.tileLayer(
-      `https://api.tiles.openaip.net/api/data/openaip/{z}/{x}/{y}.png?apiKey=${encodeURIComponent(s.openAipKey)}`,
-      { maxZoom: 14, minZoom: 4, opacity: 0.9, attribution: 'Luftrom © openAIP (CC BY-NC 4.0)' },
-    ).addTo(map);
-  }
+  renderAirspace();
   renderAerodata();
   if (s.showMetars) scheduleMetars();
   else metarLayer.clearLayers();
@@ -355,6 +356,8 @@ export function renderAerodata(): void {
         weight: 1.5,
         fillColor: a.type === 'W' ? '#fff' : color,
         fillOpacity: 1,
+        // Trykk på flyplassen skal ikke også åpne luftromsinfo.
+        bubblingMouseEvents: false,
       })
         .bindPopup(() => airportPopup(a), POPUP_OPTS)
         .addTo(airportLayer);
@@ -650,6 +653,7 @@ function showPointMenu(p: LatLon): void {
         { class: 'popup' },
         h('div', { class: 'p-title' }, 'Punkt'),
         h('div', { class: 'muted small' }, formatLatLon(p)),
+        asDb ? airspaceList(airspacesAt(asDb, p)) : null,
         h(
           'div',
           { class: 'popup-actions' },
@@ -660,6 +664,100 @@ function showPointMenu(p: LatLon): void {
     )
     .openOn(map);
 }
+
+// ---------- Luftrom ----------
+
+/** Synlig og relevant for VFR: nedre grense under 10 000 ft. */
+const airspaceRelevant = (a: AirspaceDb['airspaces'][number]) => a.lo < 10000 && a.kind !== 'OTHER';
+const LABEL_MIN_ZOOM: Partial<Record<AirspaceKind, number>> = { CTR: 8, TIZ: 8, RMZ: 9, ATZ: 9, R: 10, P: 10, TMA: 10, D: 11, SPORT: 11 };
+
+function renderAirspace(): void {
+  if (!map) return;
+  airspaceLayer.clearLayers();
+  if (asDb && state.settings.showAirspace) {
+    // Store/høye områder først, så små soner (CTR) havner øverst.
+    const list = asDb.airspaces.filter(airspaceRelevant).sort((x, y) => {
+      const area = (b: number[]) => (b[2] - b[0]) * (b[3] - b[1]);
+      return area(y.bbox) - area(x.bbox);
+    });
+    for (const a of list) {
+      const st = KIND_STYLE[a.kind];
+      const poly = L.polygon(
+        a.g.map((ring) => ring.map(([x, y]) => [y, x] as [number, number])),
+        { ...st, fillColor: st.color, interactive: false, smoothFactor: 1 },
+      ).addTo(airspaceLayer);
+      const minZ = LABEL_MIN_ZOOM[a.kind];
+      if (minZ !== undefined)
+        poly.bindTooltip(`<b>${esc(a.n)}</b><br>${a.c.length === 1 ? `${a.c} · ` : ''}${fmtLimits(a)}`, {
+          permanent: true,
+          direction: 'center',
+          // CTR/TIZ ligger rundt flyplassen: flytt etiketten ned så den ikke dekker flyplassen.
+          offset: a.kind === 'CTR' || a.kind === 'TIZ' ? [0, 30] : [0, 0],
+          className: `as-label as-z${minZ}`,
+          opacity: 1,
+        });
+    }
+  }
+  updateAirspaceLabels();
+  // Tegn flyplasser, rute og vær over luftrommet igjen (felles tegneflate tegner i rekkefølge).
+  renderAerodata();
+  renderRoute();
+  scheduleMetars();
+}
+
+function updateAirspaceLabels(): void {
+  const c = map.getContainer();
+  const z = map.getZoom();
+  for (const lvl of [8, 9, 10, 11]) c.classList.toggle(`show-as${lvl}`, z >= lvl);
+}
+
+const esc = (t: string) => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] as string);
+
+export function airspaceList(list: AirspaceDb['airspaces']): HTMLElement {
+  if (!list.length) return h('div', { class: 'p-muted', style: { marginTop: '6px' } }, 'Ingen kontrollert/spesielt luftrom her (klasse G).');
+  return h(
+    'div',
+    { class: 'as-list' },
+    list.map((a) =>
+      h(
+        'div',
+        { class: 'as-item', style: { borderLeftColor: KIND_STYLE[a.kind].color } },
+        h('div', null, h('strong', null, a.n), a.c.length === 1 ? h('span', { class: 'as-class' }, a.c) : null),
+        h('div', { class: 'as-limits' }, fmtLimits(a)),
+        h('div', { class: 'p-muted' }, KIND_TEXT[a.kind]),
+        a.f ? h('div', null, 'Frekvens ', h('strong', null, a.f.replace(/\s*MHZ/i, ' MHz'))) : null,
+        a.notam || a.amc ? h('div', { class: 'as-flag' }, a.notam ? 'Aktiveres ved NOTAM' : 'Aktiveres av AMC – sjekk status') : null,
+        h('div', { class: 'p-muted' }, KIND_ADVICE[a.kind]),
+      ),
+    ),
+  );
+}
+
+function showAirspacesAt(p: LatLon): void {
+  if (!asDb || !state.settings.showAirspace) return;
+  const list = airspacesAt(asDb, p).filter(airspaceRelevant);
+  if (!list.length) return;
+  L.popup(POPUP_OPTS)
+    .setLatLng([p.lat, p.lon])
+    .setContent(
+      h(
+        'div',
+        { class: 'popup' },
+        h('div', { class: 'p-title' }, 'Luftrom her'),
+        h('div', { class: 'p-muted' }, `Lavest først · AIRAC ${asDb.airac}`),
+        airspaceList(list),
+        h(
+          'div',
+          { class: 'popup-actions' },
+          h('button', { onclick: () => (map.closePopup(), directTo(userWaypoint(p))) }, 'Direkte →'),
+          h('button', { onclick: () => (map.closePopup(), addRoutePoint(userWaypoint(p))) }, '+ Rute'),
+        ),
+      ),
+    )
+    .openOn(map);
+}
+
+export const getAirspaceDb = () => asDb;
 
 export function flyTo(p: LatLon, zoom = 10): void {
   state.following = false;

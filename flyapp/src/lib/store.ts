@@ -75,7 +75,6 @@ export interface Checklist {
 }
 
 export interface Settings {
-  openAipKey: string;
   baseLayer: 'osm' | 'topo';
   showAirports: boolean;
   showNavaids: boolean;
@@ -86,7 +85,6 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  openAipKey: '',
   baseLayer: 'topo',
   showAirports: true,
   showNavaids: true,

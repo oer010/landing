@@ -6,6 +6,10 @@
 //   FLYAPP_COUNTRIES  Kommaseparerte ISO-landkoder (f.eks. "NO,SE,DK,FI").
 //                     Tom/ikke satt = hele Europa. "ALL" = hele verden.
 //   FLYAPP_DATA_URL   Alternativ base-URL for CSV-filene (speil/cache).
+//   FLYAPP_AIRSPACE_URL  Alternativ kilde for norsk luftrom (GeoJSON i pg-xc-format).
+//
+// Luftrom: norsk luftrom konvertert fra AIP Norge av prosjektet relet/pg-xc
+// (luftrom.info). Uten ansvar – sjekk alltid gjeldende AIP/NOTAM.
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +20,48 @@ const COUNTRIES = (process.env.FLYAPP_COUNTRIES || '')
   .map((s) => s.trim().toUpperCase())
   .filter(Boolean);
 const OUT = join(dirname(fileURLToPath(import.meta.url)), '..', 'public', 'data', 'airports.json');
+const AIRSPACE_OUT = join(dirname(OUT), 'airspace.json');
+const AIRSPACE_URL = process.env.FLYAPP_AIRSPACE_URL || 'https://raw.githubusercontent.com/relet/pg-xc/master/geojson/luftrom.geojson';
+
+/** Henter og komprimerer luftrom. Feiler ikke bygget om kilden er nede. */
+async function buildAirspace() {
+  try {
+    const res = await fetch(AIRSPACE_URL);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const gj = await res.json();
+    const r4 = (v) => Math.round(v * 1e4) / 1e4;
+    const out = [];
+    let airac = '';
+    for (const f of gj.features ?? []) {
+      const p = f.properties ?? {};
+      const g = f.geometry;
+      if (!g || !['Polygon', 'MultiPolygon'].includes(g.type)) continue;
+      const polys = g.type === 'Polygon' ? [g.coordinates] : g.coordinates;
+      const m = String(p.source_href ?? '').match(/(\d{4}-\d{2}-\d{2})-AIRAC/);
+      if (m && m[1] > airac) airac = m[1];
+      out.push({
+        n: p.name,
+        c: p.class,
+        lo: Number(p['from (ft amsl)'] ?? 0),
+        hi: Number(p['to (ft amsl)'] ?? 0),
+        loFl: p['from (fl)'] ?? null,
+        hiFl: p['to (fl)'] ?? null,
+        f: p.frequency ?? null,
+        notam: p.notam_only ? 1 : 0,
+        amc: p.amc_only ? 1 : 0,
+        src: p.source_href ?? null,
+        // Bare ytterringen; [lon, lat] rundet til ~10 m.
+        g: polys.map((rings) => rings[0].map(([x, y]) => [r4(x), r4(y)])),
+      });
+    }
+    const payload = { generated: new Date().toISOString(), airac, source: 'AIP Norge via relet/pg-xc (luftrom.info)', airspaces: out };
+    const json = JSON.stringify(payload);
+    await writeFile(AIRSPACE_OUT, json);
+    console.log(`Skrev ${out.length} luftrom (AIRAC ${airac || 'ukjent'}, ${(json.length / 1e6).toFixed(2)} MB) til ${AIRSPACE_OUT}`);
+  } catch (e) {
+    console.warn(`Advarsel: kunne ikke hente luftrom fra ${AIRSPACE_URL}: ${e.message}`);
+  }
+}
 
 const AIRPORT_TYPES = { large_airport: 'L', medium_airport: 'M', small_airport: 'S', seaplane_base: 'W' };
 const NAVAID_TYPES = new Set(['VOR', 'VOR-DME', 'VORTAC', 'NDB', 'NDB-DME', 'DME', 'TACAN']);
@@ -80,6 +126,8 @@ function inRegion(country, continent) {
 }
 
 async function main() {
+  await mkdir(dirname(OUT), { recursive: true });
+  const airspaceDone = buildAirspace();
   const [airports, runways, freqs, navaids] = await Promise.all([
     fetchCsv('airports.csv'),
     fetchCsv('runways.csv'),
@@ -160,6 +208,7 @@ async function main() {
   await mkdir(dirname(OUT), { recursive: true });
   const json = JSON.stringify(payload);
   await writeFile(OUT, json);
+  await airspaceDone;
   console.log(
     `Skrev ${outAirports.length} flyplasser og ${outNavaids.length} navaids (${(json.length / 1e6).toFixed(1)} MB) til ${OUT}`,
   );
