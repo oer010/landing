@@ -1,4 +1,4 @@
-import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin, type FlightCategory, wxError } from '../../lib/metar';
+import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin, type FlightCategory, weatherSource, wxError } from '../../lib/metar';
 import { load, save } from '../../lib/store';
 import { badge, clear, h, section, toast } from '../dom';
 import { state } from '../state';
@@ -9,12 +9,23 @@ export function renderWeather(el: HTMLElement): void {
   const routeIds = [...new Set(state.route.waypoints.filter((w) => w.kind === 'airport' && /^[A-Z]{4}$/.test(w.id)).map((w) => w.id))];
   const ids = [...new Set([...routeIds, ...favourites])];
   const list = h('div', null, h('p', { class: 'muted' }, 'Henter METAR/TAF …'));
-  const input = h('input', { type: 'text', placeholder: 'Legg til ICAO, f.eks. ENTO', autocapitalize: 'characters', maxlength: 4 });
+  const input = h('input', {
+    type: 'text',
+    placeholder: 'Legg til ICAO, f.eks. ENTO',
+    autocapitalize: 'characters',
+    autocomplete: 'off',
+    maxlength: 4,
+    enterkeyhint: 'done',
+    onkeydown: (e: KeyboardEvent) => e.key === 'Enter' && (e.preventDefault(), add()),
+  });
   const add = () => {
     const id = input.value.trim().toUpperCase();
-    if (!/^[A-Z]{4}$/.test(id)) return toast('Skriv en firebokstavs ICAO-kode', 'warn');
-    favourites = [...new Set([id, ...favourites])];
+    if (!/^[A-Z]{4}$/.test(id)) return toast('Skriv en firebokstavs ICAO-kode, f.eks. ENTO', 'warn');
+    favourites = [id, ...favourites.filter((f) => f !== id)];
     save('wxFavourites', favourites);
+    input.value = '';
+    input.blur();
+    toast(`${id} lagt til – henter vær …`);
     state.emit('route');
   };
 
@@ -45,7 +56,7 @@ export function renderWeather(el: HTMLElement): void {
         link('https://aviationweather.gov/', 'AviationWeather.gov – globale kart, SIGMET'),
         link('https://www.windy.com/', 'Windy – vind i høyden'),
       ),
-      h('p', { class: 'muted small' }, 'METAR/TAF: aviationweather.gov. Appen erstatter ikke en offisiell værbriefing.'),
+      h('p', { class: 'muted small' }, 'METAR/TAF: aviationweather.gov, eller MET Norge der proxy mangler. Appen erstatter ikke en offisiell værbriefing.'),
     ),
   );
 
@@ -93,7 +104,15 @@ export function renderWeather(el: HTMLElement): void {
                   )
                 : null,
             ),
-            m ? [h('pre', { class: 'raw' }, m.rawOb), h('div', { class: 'muted small' }, `${metarAgeMin(m)} min gammel · ${decodeMetar(m).join(' · ')}`)] : h('p', { class: 'muted small' }, 'Ingen METAR'),
+            m
+              ? [h('pre', { class: 'raw' }, m.rawOb), h('div', { class: 'muted small' }, `${metarAgeMin(m)} min gammel · ${decodeMetar(m).join(' · ')}`)]
+              : h(
+                  'p',
+                  { class: 'muted small' },
+                  weatherSource() === 'MET Norge'
+                    ? 'Ingen METAR fra MET Norge for denne flyplassen (dekker Norden og de største flyplassene i Europa).'
+                    : 'Ingen METAR for denne flyplassen akkurat nå.',
+                ),
             t ? h('details', null, h('summary', null, 'TAF'), h('pre', { class: 'raw' }, t.rawTAF)) : null,
           );
         }),

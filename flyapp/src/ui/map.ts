@@ -275,7 +275,11 @@ async function loadMetars(): Promise<void> {
   }
   const b = map.getBounds();
   try {
-    const metars = await fetchMetarsInBox(b.getSouth(), b.getWest(), b.getNorth(), b.getEast());
+    const metars = await fetchMetarsInBox(b.getSouth(), b.getWest(), b.getNorth(), b.getEast(), () =>
+      state.db.airports
+        .filter((a) => a.country === 'NO' && /^EN[A-Z]{2}$/.test(a.ident) && a.type !== 'S' && b.contains([a.lat, a.lon]))
+        .map((a) => a.ident),
+    );
     metarLayer.clearLayers();
     for (const m of metars) drawMetar(m);
   } catch (e) {

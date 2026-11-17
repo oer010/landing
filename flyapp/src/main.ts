@@ -1,5 +1,6 @@
 import './style.css';
 import { loadDb } from './lib/data';
+import { setAirportLookup } from './lib/metar';
 import { clear, h, toast } from './ui/dom';
 import { initDatabar } from './ui/databar';
 import { fitRoute, initMap, map } from './ui/map';
@@ -168,6 +169,7 @@ async function main(): Promise<void> {
     toast(String((e as Error).message), 'error', 10000);
     state.db = { airports: [], navaids: [], byIdent: new Map(), navaidsByIdent: new Map(), generated: new Date().toISOString(), region: '–' };
   }
+  setAirportLookup((id) => state.db.byIdent.get(id));
   initMap(mapEl);
   document.getElementById('loading')?.remove();
 

@@ -1,6 +1,7 @@
 // METAR/TAF fra aviationweather.gov Data API (direkte i iPhone-appen, via /awc-proxy i nettleser).
 
 import { awcBase } from './platform';
+import { latestByStation, parseMetar } from './metparse';
 
 export type FlightCategory = 'VFR' | 'MVFR' | 'IFR' | 'LIFR' | 'UNK';
 
@@ -97,8 +98,10 @@ export function decodeMetar(m: Metar): string[] {
       out.push(`Vind: ${dir} ${m.wspd} kt${m.wgst ? `, kast ${m.wgst} kt` : ''}`);
     }
   }
+  const visM = (m as Metar & { visM?: number }).visM;
   const vis = visibilitySm(m.visib);
-  if (vis !== null) {
+  if (visM !== undefined) out.push(`Sikt: ${visM >= 9999 ? '≥ 10 km' : visM >= 5000 ? `${(visM / 1000).toFixed(0)} km` : `${visM} m`}`);
+  else if (vis !== null) {
     const plus = typeof m.visib === 'string' && m.visib.includes('+');
     out.push(`Sikt: ${plus ? '≥ 10 km' : `${(vis * 1.609).toFixed(vis < 3 ? 1 : 0)} km`}`);
   }
@@ -117,28 +120,95 @@ export const metarAgeMin = (m: Metar, now = Date.now()): number => Math.round((n
 const cache = new Map<string, { t: number; data: unknown }>();
 const TTL = 5 * 60 * 1000;
 
-async function getJson<T>(path: string): Promise<T> {
-  const hit = cache.get(path);
+const NOT_AVAILABLE = 'Vær er ikke tilgjengelig i denne versjonen (krever værproxy – se README)';
+
+async function cached<T>(key: string, load: () => Promise<T>): Promise<T> {
+  const hit = cache.get(key);
   if (hit && Date.now() - hit.t < TTL) return hit.data as T;
-  const res = await fetch(`${awcBase()}${path}`);
-  if (res.status === 204) return [] as T;
-  if (res.status === 404 || res.status === 405 || !(res.headers.get('content-type') ?? '').includes('json'))
-    throw new Error('Vær er ikke tilgjengelig i denne versjonen (krever værproxy – se README)');
-  if (!res.ok) throw new Error(`Værtjenesten svarte ${res.status}`);
-  const data = (await res.json()) as T;
-  cache.set(path, { t: Date.now(), data });
+  const data = await load();
+  cache.set(key, { t: Date.now(), data });
   return data;
 }
 
-export const fetchMetars = (ids: string[]) =>
-  ids.length ? getJson<Metar[]>(`metar?ids=${encodeURIComponent(ids.join(','))}&format=json`) : Promise.resolve([]);
+async function getJson<T>(path: string): Promise<T> {
+  return cached(`awc:${path}`, async () => {
+    const res = await fetch(`${awcBase()}${path}`);
+    if (res.status === 204) return [] as T;
+    if (res.status === 404 || res.status === 405 || !(res.headers.get('content-type') ?? '').includes('json')) throw new Error(NOT_AVAILABLE);
+    if (!res.ok) throw new Error(`Værtjenesten svarte ${res.status}`);
+    return (await res.json()) as T;
+  });
+}
 
-export const fetchTafs = (ids: string[]) =>
-  ids.length ? getJson<Taf[]>(`taf?ids=${encodeURIComponent(ids.join(','))}&format=json`) : Promise.resolve([]);
+// ---- Reserve: Meteorologisk institutt (norske flyplasser, tillater kall fra nettleser) ----
 
-/** bbox: sør, vest, nord, øst */
-export const fetchMetarsInBox = (s: number, w: number, n: number, e: number) =>
-  getJson<Metar[]>(`metar?bbox=${[s, w, n, e].map((v) => v.toFixed(2)).join(',')}&format=json`);
+type Lookup = (id: string) => { lat: number; lon: number; name: string } | undefined;
+let lookup: Lookup = () => undefined;
+/** Gir METAR fra MET koordinater/navn fra flyplassdatabasen. */
+export const setAirportLookup = (fn: Lookup) => (lookup = fn);
+
+/** null = ikke prøvd ennå; false = AWC-proxy mangler, bruk MET direkte. */
+let awcAvailable: boolean | null = null;
+export const weatherSource = () => (awcAvailable === false ? 'MET Norge' : 'aviationweather.gov');
+
+async function metText(kind: 'metar' | 'taf', ids: string[]): Promise<Map<string, string>> {
+  return cached(`met:${kind}:${ids.join(',')}`, async () => {
+    const res = await fetch(`https://api.met.no/weatherapi/tafmetar/1.0/${kind}.txt?icao=${encodeURIComponent(ids.join(','))}`);
+    if (!res.ok) throw new Error(`MET svarte ${res.status}`);
+    return latestByStation(await res.text());
+  });
+}
+
+async function metMetars(ids: string[]): Promise<Metar[]> {
+  const raw = await metText('metar', ids);
+  const out: Metar[] = [];
+  for (const [id, line] of raw) {
+    const m = parseMetar(line);
+    if (!m) continue;
+    const ap = lookup(id);
+    if (ap) Object.assign(m, { lat: ap.lat, lon: ap.lon, name: ap.name });
+    out.push(m);
+  }
+  return out;
+}
+
+async function metTafs(ids: string[]): Promise<Taf[]> {
+  const raw = await metText('taf', ids);
+  return [...raw].map(([icaoId, rawTAF]) => ({ icaoId, rawTAF: `TAF ${rawTAF}`, issueTime: '', validTimeFrom: 0, validTimeTo: 0 }));
+}
+
+/** Prøv AWC; mangler proxyen (f.eks. GitHub Pages), bruk MET direkte og husk valget. */
+async function withFallback<T>(awc: () => Promise<T>, met: () => Promise<T>): Promise<T> {
+  if (awcAvailable === false) return met();
+  try {
+    const r = await awc();
+    awcAvailable = true;
+    return r;
+  } catch (e) {
+    if (awcAvailable === true && !(e instanceof Error && e.message === NOT_AVAILABLE)) throw e;
+    awcAvailable = false;
+    return met();
+  }
+}
+
+const clean = (ids: string[]) => [...new Set(ids.map((i) => i.toUpperCase()).filter((i) => /^[A-Z]{4}$/.test(i)))];
+
+export const fetchMetars = (ids: string[]): Promise<Metar[]> => {
+  const c = clean(ids);
+  return c.length ? withFallback(() => getJson<Metar[]>(`metar?ids=${encodeURIComponent(c.join(','))}&format=json`), () => metMetars(c)) : Promise.resolve([]);
+};
+
+export const fetchTafs = (ids: string[]): Promise<Taf[]> => {
+  const c = clean(ids);
+  return c.length ? withFallback(() => getJson<Taf[]>(`taf?ids=${encodeURIComponent(c.join(','))}&format=json`), () => metTafs(c)) : Promise.resolve([]);
+};
+
+/** bbox: sør, vest, nord, øst. Med MET som kilde hentes METAR for oppgitte flyplasser i stedet. */
+export const fetchMetarsInBox = (s: number, w: number, n: number, e: number, idsInBox: () => string[] = () => []) =>
+  withFallback(
+    () => getJson<Metar[]>(`metar?bbox=${[s, w, n, e].map((v) => v.toFixed(2)).join(',')}&format=json`),
+    () => metMetars(clean(idsInBox()).slice(0, 60)),
+  );
 
 /** Brukervennlig feiltekst for værhenting. */
 export const wxError = (e: unknown): string =>
