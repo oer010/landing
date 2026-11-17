@@ -1,0 +1,25 @@
+import { Agent, type AgentOptions } from 'node:https';
+import { defineConfig } from 'vite';
+
+// aviationweather.gov sender ikke CORS-headere, så nettleseren kan ikke hente
+// METAR/TAF direkte. Dev- og preview-serveren videresender derfor /awc/* dit.
+// Ved statisk hosting må tilsvarende proxy settes opp på webserveren.
+//
+// proxyEnv gjør at HTTPS_PROXY/NO_PROXY respekteres (Node >= 22.21); uten
+// slike variabler går forespørselen direkte som vanlig.
+const agent = new Agent({ keepAlive: true, proxyEnv: process.env } as AgentOptions & { proxyEnv: NodeJS.ProcessEnv });
+
+const awcProxy = {
+  '/awc': {
+    target: 'https://aviationweather.gov',
+    changeOrigin: true,
+    agent,
+    rewrite: (p: string) => p.replace(/^\/awc/, ''),
+  },
+};
+
+export default defineConfig({
+  base: './',
+  server: { host: true, proxy: awcProxy },
+  preview: { host: true, proxy: awcProxy },
+});
