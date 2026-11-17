@@ -1,6 +1,6 @@
 import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin, type FlightCategory, weatherSource, wxError } from '../../lib/metar';
 import { load, save } from '../../lib/store';
-import { badge, clear, h, section, toast } from '../dom';
+import { badge, clear, h, section, toast, tafView } from '../dom';
 import { state } from '../state';
 
 let favourites: string[] = load('wxFavourites', ['ENGM', 'ENBR', 'ENZV', 'ENVA']);
@@ -113,7 +113,7 @@ export function renderWeather(el: HTMLElement): void {
                     ? 'Ingen METAR fra MET Norge for denne flyplassen (dekker Norden og de største flyplassene i Europa).'
                     : 'Ingen METAR for denne flyplassen akkurat nå.',
                 ),
-            t ? h('details', null, h('summary', null, 'TAF'), h('pre', { class: 'raw' }, t.rawTAF)) : null,
+            tafView(t?.rawTAF),
           );
         }),
       );

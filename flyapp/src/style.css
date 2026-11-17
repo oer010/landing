@@ -291,3 +291,9 @@ dialog::backdrop { background: rgb(0 0 0 / 0.6); }
   #print td, #print th { border: 1px solid #000; padding: 6px; font-size: 12px; color: #000; }
   html, body { background: #fff; height: auto; }
 }
+
+/* TAF */
+ul.taf-periods { list-style: none; padding: 0; margin: 4px 0; }
+ul.taf-periods li { border-left: 4px solid var(--muted); padding: 4px 8px; margin: 4px 0; background: #0b1325; border-radius: 0 6px 6px 0; }
+ul.taf-periods code { display: block; font-size: 12px; white-space: pre-wrap; word-break: break-word; margin-top: 2px; }
+.taf-head { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }

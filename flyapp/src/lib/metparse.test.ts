@@ -51,3 +51,29 @@ describe('METAR-tolker (MET Norge-format)', () => {
     expect(latestByStation('TAF AMD ENBR 171700Z 1718/1818 VRB05KT CAVOK=').get('ENBR')).toContain('1718/1818');
   });
 });
+
+import { tafPeriods } from './metparse';
+
+describe('TAF-perioder', () => {
+  it('deler opp og arver fra hovedvarselet', () => {
+    const p = tafPeriods('ENTC 171700Z 1718/1818 04007KT 9999 FEW025 PROB40 TEMPO 1718/1802 1000 SHSN BKN008 SCT015CB=');
+    expect(p.map((x) => x.kind)).toEqual(['Varsel', 'PROB40 TEMPO']);
+    expect(p[0].category).toBe('VFR');
+    expect(p[0].when).toBe('17. 18Z – 18. 18Z');
+    expect(p[1].category).toBe('LIFR');
+    expect(p[1].text).toBe('1000 SHSN BKN008 SCT015CB');
+  });
+  it('TEMPO med bare skyer arver sikt', () => {
+    const p = tafPeriods('TAF ENTO 171700Z 1718/1818 01010KT 9999 SCT020 TEMPO 1722/1802 BKN014');
+    expect(p[1].kind).toBe('TEMPO');
+    expect(p[1].category).toBe('MVFR');
+  });
+  it('BECMG og FM', () => {
+    const p = tafPeriods('ENEV 171700Z 1718/1818 05006KT CAVOK TEMPO 1722/1809 08015G25KT BECMG 1807/1809 35010KT');
+    expect(p.map((x) => x.category)).toEqual(['VFR', 'VFR', 'VFR']);
+    const f = tafPeriods('KJFK 171720Z 1718/1824 31010KT P6SM SCT250 FM180200 18005KT 3SM BR OVC008');
+    expect(f[1].kind).toBe('FM');
+    expect(f[1].when).toBe('fra 18. 02:00Z');
+    expect(f[1].category).toBe('IFR');
+  });
+});

@@ -1,3 +1,6 @@
+import { tafPeriods } from '../lib/metparse';
+import { CATEGORY_COLORS } from '../lib/metar';
+
 type Child = Node | string | number | null | undefined | false | Child[];
 type Attrs = Record<string, unknown>;
 
@@ -104,4 +107,28 @@ export function section(title: string, ...children: Child[]): HTMLElement {
 
 export function badge(text: string, color: string): HTMLSpanElement {
   return h('span', { class: 'badge', style: { background: color } }, text);
+}
+
+
+/** TAF delt opp i perioder med fargekode for flygekategori. */
+export function tafView(raw: string | null | undefined): HTMLElement {
+  if (!raw) return h('p', { class: 'muted small' }, 'Ingen TAF – mindre flyplasser har ofte ikke TAF. Bruk nærmeste flyplass med TAF eller GAMET/LLF.');
+  const periods = tafPeriods(raw);
+  return h(
+    'div',
+    { class: 'taf' },
+    h('h4', null, 'TAF'),
+    h(
+      'ul',
+      { class: 'taf-periods' },
+      periods.map((p) =>
+        h(
+          'li',
+          { style: { borderLeftColor: CATEGORY_COLORS[p.category] } },
+          h('div', { class: 'taf-head' }, badge(p.category, CATEGORY_COLORS[p.category]), h('strong', null, ` ${p.kind}`), h('span', { class: 'muted small' }, ` ${p.when}`)),
+          h('code', null, p.text),
+        ),
+      ),
+    ),
+  );
 }

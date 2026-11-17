@@ -4,7 +4,7 @@ import { declination, fmtVar, trueToMag } from '../../lib/mag';
 import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin, wxError } from '../../lib/metar';
 import { windComponents } from '../../lib/navlog';
 import { sunTimes } from '../../lib/sun';
-import { badge, clear, fmt, h, section } from '../dom';
+import { badge, clear, fmt, h, section, tafView } from '../dom';
 import { addRoutePoint, AIRPORT_COLORS, flyTo, map } from '../map';
 import { directTo } from '../position';
 import { airportToWaypoint, state } from '../state';
@@ -180,7 +180,7 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
                 h('ul', { class: 'decoded' }, decodeMetar(m).map((s) => h('li', null, s))),
               ]
             : h('p', { class: 'muted' }, 'Ingen METAR for denne flyplassen.'),
-          t ? [h('h4', null, 'TAF'), h('pre', { class: 'raw' }, t.rawTAF)] : null,
+          tafView(t?.rawTAF),
         );
       })
       .catch((e) => clear(wxBox, h('p', { class: 'muted' }, wxError(e))));
