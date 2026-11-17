@@ -117,7 +117,8 @@ export function initMap(el: HTMLElement): L.Map {
   map.on('click', (e: L.LeafletMouseEvent) => {
     const p = { lat: e.latlng.lat, lon: e.latlng.lng };
     if (editMode) addRoutePoint(userWaypoint(p));
-    else showAirspacesAt(p);
+    // Fingertrykk som bommer litt: åpne nærmeste flyplass/VOR/NDB innen ~en fingerbredde.
+    else if (!openNearestAt(e.containerPoint)) showAirspacesAt(p);
   });
   map.on('zoomend', updateAirspaceLabels);
   loadAirspace().then((db) => {
@@ -383,9 +384,10 @@ export function renderAerodata(): void {
       L.marker([n.lat, n.lon], {
         icon: L.divIcon({
           className: 'navaid-icon',
-          html: `<svg viewBox="0 0 20 20" width="18" height="18"><polygon points="5,2 15,2 19,10 15,18 5,18 1,10" fill="none" stroke="${isNdb ? '#a16207' : '#1e3a8a'}" stroke-width="2"/><circle cx="10" cy="10" r="2" fill="${isNdb ? '#a16207' : '#1e3a8a'}"/></svg><span>${n.ident}</span>`,
-          iconSize: [18, 18],
-          iconAnchor: [9, 9],
+          // 32×32 treffområde rundt et 22 px symbol; trykk som bommer fanges av kartets nærmeste-søk.
+          html: `<svg viewBox="0 0 20 20" width="22" height="22"><polygon points="5,2 15,2 19,10 15,18 5,18 1,10" fill="rgb(255 255 255 / 0.6)" stroke="${isNdb ? '#a16207' : '#1e3a8a'}" stroke-width="2.2"/><circle cx="10" cy="10" r="2.2" fill="${isNdb ? '#a16207' : '#1e3a8a'}"/></svg><span>${n.ident}</span>`,
+          iconSize: [32, 32],
+          iconAnchor: [16, 16],
         }),
         keyboard: false,
       })
@@ -758,6 +760,27 @@ function showAirspacesAt(p: LatLon): void {
 }
 
 export const getAirspaceDb = () => asDb;
+
+const TAP_RADIUS_PX = 26;
+
+/** Åpner info for nærmeste synlige flyplass eller navaid nær trykket. Returnerer true om noe ble åpnet. */
+function openNearestAt(pt: L.Point): boolean {
+  if (!state.db) return false;
+  const z = map.getZoom();
+  const b = map.getBounds();
+  let best: { d: number; ll: [number, number]; content: () => HTMLElement } | null = null;
+  const consider = (lat: number, lon: number, content: () => HTMLElement) => {
+    if (!b.contains([lat, lon])) return;
+    const d = pt.distanceTo(map.latLngToContainerPoint([lat, lon]));
+    if (d <= TAP_RADIUS_PX && (!best || d < best.d)) best = { d, ll: [lat, lon], content };
+  };
+  if (state.settings.showNavaids && z >= 7) for (const n of state.db.navaids) consider(n.lat, n.lon, () => navaidPopup(n));
+  if (state.settings.showAirports) for (const a of state.db.airports) if (airportVisible(a, z)) consider(a.lat, a.lon, () => airportPopup(a));
+  const hit = best as { d: number; ll: [number, number]; content: () => HTMLElement } | null;
+  if (!hit) return false;
+  L.popup(POPUP_OPTS).setLatLng(hit.ll).setContent(hit.content()).openOn(map);
+  return true;
+}
 
 export function flyTo(p: LatLon, zoom = 10): void {
   state.following = false;

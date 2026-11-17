@@ -283,7 +283,8 @@ svg.envelope .pt.bad { fill: var(--bad); stroke: #fff; }
 .leaflet-tooltip.ap-label { line-height: 1.3; }
 .leaflet-tooltip.ap-label { background: rgb(255 255 255 / 0.8); border: none; box-shadow: none; color: #111; font-weight: 700; font-size: 11px; padding: 0 3px; border-radius: 3px; }
 .leaflet-tooltip.ap-label::before { display: none; }
-.navaid-icon span { position: absolute; left: 20px; top: 1px; font-size: 10px; font-weight: 700; color: #1e3a8a; background: rgb(255 255 255 / 0.7); padding: 0 2px; }
+.leaflet-marker-icon.navaid-icon { display: grid; place-items: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.navaid-icon span { position: absolute; left: 28px; top: 8px; font-size: 11px; font-weight: 700; color: #1e3a8a; background: rgb(255 255 255 / 0.75); padding: 0 3px; border-radius: 3px; pointer-events: none; }
 .wp-icon .wp-dot { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 4px solid var(--accent); }
 .wp-icon.active .wp-dot { background: var(--accent); border-color: #fff; }
 .wp-icon .wp-label { position: absolute; left: 18px; top: -2px; background: var(--accent); color: #fff; font-weight: 700; font-size: 11px; padding: 1px 4px; border-radius: 4px; white-space: nowrap; }
