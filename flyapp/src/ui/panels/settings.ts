@@ -66,6 +66,7 @@ export function renderSettings(el: HTMLElement): void {
         { class: 'warnbox' },
         'Kun for VFR-planlegging og situasjonsforståelse. Ikke godkjent for navigasjon. Data kan være feil eller utdaterte – bruk alltid gjeldende AIP, VFR-kart, NOTAM og offisiell værbriefing.',
       ),
+      h('p', { class: 'muted small' }, `Versjon: ${__BUILD__}`),
       h('p', { class: 'muted small' }, 'Kart © OpenStreetMap-bidragsytere og OpenTopoMap. Vær: aviationweather.gov. Misvisning: NOAA World Magnetic Model 2025.'),
     ),
   );

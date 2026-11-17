@@ -172,7 +172,7 @@ export function startGps(): void {
       { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 },
     );
     webWatchId = id;
-    toast('GPS på – venter på posisjon …');
+    toast(`GPS på – venter på posisjon … (v ${__BUILD__})`);
     return;
   }
 

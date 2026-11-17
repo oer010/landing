@@ -20,6 +20,7 @@ const awcProxy = {
 
 export default defineConfig({
   base: './',
+  define: { __BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ') + ' UTC') },
   server: { host: true, proxy: awcProxy },
   preview: { host: true, proxy: awcProxy },
 });
