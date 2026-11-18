@@ -45,7 +45,7 @@ export function notamKind(n: Notam): NotamKind {
   const c = n.code.slice(1, 3);
   if (/^R/.test(c)) return 'restriction';
   if (/^O[BL]/.test(c)) return 'obstacle';
-  if (/^[MFL]/.test(c) || /^ (A)$/.test(n.scope)) return 'aerodrome';
+  if (/^[MFL]/.test(c) || n.scope.trim() === 'A') return 'aerodrome';
   if (/^N/.test(c) || /^I/.test(c)) return 'navaid';
   if (/^A/.test(c) || /^W/.test(c)) return 'airspace';
   return 'other';
@@ -90,7 +90,7 @@ export function geometryFromText(text: string): NotamGeom[] {
     const g = groups[groups.length - 1];
     const gap = g ? t.slice(g.end, m.index) : '';
     // Samme rekke når det bare står skilletegn (og evt. «TO»/«THEN ALONG») mellom.
-    if (g && /^[\s,\-–/]*(?:(?:TO|THEN|AND|ALONG|-)[\s,\-–/]*)*$/.test(gap)) {
+    if (g && /^[\s,\-–/()]*(?:(?:TO|THEN|AND|ALONG|-)[\s,\-–/()]*)*$/.test(gap)) {
       g.pts.push(coordOf(m));
       g.end = m.index! + m[0].length;
     } else groups.push({ pts: [coordOf(m)], start: m.index!, end: m.index! + m[0].length });
@@ -175,6 +175,11 @@ export function parseNotam(r: RawNotam): Notam | null {
   };
 }
 
+/** Sjekkliste (QKKKK) og områder som er trukket tilbake (…AW) tegnes ikke. */
+export function notamDrawable(n: Notam): boolean {
+  return n.code !== 'QKKKK' && !/^Q..AW$/.test(n.code);
+}
+
 /** Gjelder nå, eller starter innen `aheadH` timer. */
 export function notamStatus(n: Notam, now = new Date(), aheadH = 24): 'active' | 'upcoming' | 'expired' | 'later' {
   if (n.to && n.to.getTime() < now.getTime()) return 'expired';
@@ -185,7 +190,10 @@ export function notamStatus(n: Notam, now = new Date(), aheadH = 24): 'active' |
 /** Geometri som skal tegnes: fra teksten, ellers Q-linjens sirkel (når den er lokal nok). */
 export function notamShapes(n: Notam): NotamGeom[] {
   if (n.geoms.length) return n.geoms;
-  if (n.qLat !== undefined && n.qLon !== undefined && n.qRadiusNm !== undefined && n.qRadiusNm < 100)
+  // Q-linjens sirkel bare når den er lokal: fareområder/varsler opp til 30 NM, ellers 10 NM.
+  // Store sirkler (f.eks. åpningstider for en approach-enhet) tegnes ikke.
+  const maxR = /^Q[RW]/.test(n.code) ? 30 : 10;
+  if (n.qLat !== undefined && n.qLon !== undefined && n.qRadiusNm !== undefined && n.qRadiusNm <= maxR)
     return [{ type: 'circle', lat: n.qLat, lon: n.qLon, rNm: Math.max(n.qRadiusNm, 0.5) }];
   return [];
 }

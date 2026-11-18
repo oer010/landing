@@ -399,3 +399,5 @@ button.danger { background: #7f1d1d; border-color: #b91c1c; color: #fff; }
 .notam-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
 .notam-on { color: #b91c1c; }
 .notam-upc { color: #b45309; }
+.ls-notams { max-height: 40vh; overflow: auto; }
+.ls-notams summary { cursor: pointer; font-weight: 600; }

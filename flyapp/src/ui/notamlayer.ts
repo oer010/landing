@@ -2,7 +2,7 @@
 // hinderpunkter, og et merke ved flyplasser med NOTAM som bare gjelder flyplassen.
 
 import L from 'leaflet';
-import { fmtNotamTime, loadNotams, notamKind, notamShapes, notamStatus, type Notam, type NotamData, type NotamKind } from '../lib/notam';
+import { fmtNotamTime, loadNotams, notamDrawable, notamKind, notamShapes, notamStatus, type Notam, type NotamData, type NotamKind } from '../lib/notam';
 import { h } from './dom';
 import { state } from './state';
 
@@ -31,8 +31,13 @@ export function relevantNotams(now = new Date()): Notam[] {
   if (!data) return [];
   return data.notams.filter((n) => {
     const s = notamStatus(n, now);
-    return (s === 'active' || s === 'upcoming') && n.lowerFt < VFR_CEILING_FT;
+    return (s === 'active' || s === 'upcoming') && n.lowerFt < VFR_CEILING_FT && notamDrawable(n);
   });
+}
+
+/** Relevante NOTAM som ikke kan plasseres i kartet (store områder uten avgrensning). */
+export function unplacedNotams(): Notam[] {
+  return relevantNotams().filter((n) => !notamShapes(n).length && !(n.locs.length === 1 && /^EN[A-Z]{2}$/.test(n.locs[0]) && !['ENOR', 'ENOB'].includes(n.locs[0])));
 }
 
 export function initNotamLayer(m: L.Map, opts: L.PopupOptions): void {

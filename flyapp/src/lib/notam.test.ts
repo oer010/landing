@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { geometryFromText, notamKind, notamShapes, notamStatus, parseNotam } from './notam';
+import { geometryFromText, notamDrawable, notamKind, notamShapes, notamStatus, parseNotam } from './notam';
 
 const R = `A2345/26 NOTAMN
 Q) ENOR/QRTCA/IV/BO/W/000/045/6005N01120E005
@@ -30,6 +30,15 @@ describe('NOTAM', () => {
     expect(g[0]).toMatchObject({ type: 'circle', rNm: 1 });
     expect(g[1]).toMatchObject({ type: 'point' });
     expect((g[0] as { lat: number }).lat).toBeCloseTo(59.9028, 3);
+  });
+  it('lukket polygon med startpunkt i parentes, og sjekkliste/tilbaketrukket tegnes ikke', () => {
+    const g = geometryFromText('AREA PSN 633931N 0110517E - 633903N 0110423E - 633849N 0110452E - 633919N 0110609E - (633931N 0110517E). MAX HGT 400FT AGL');
+    expect(g).toHaveLength(1);
+    expect(g[0]).toMatchObject({ type: 'polygon' });
+    expect((g[0] as { pts: unknown[] }).pts).toHaveLength(4);
+    const w = parseNotam({ loc: 'ENOR', msg: 'A5995/26 NOTAMN\nQ) ENOR/QRDAW/IV/BO /W /000/090/6213N00924E007\nA) ENOR B) 2607211140 C) PERM\nE) DANGER AREA END361 HJERKINN COMPLETELY WITHDRAWN.\nF) GND G) 9000FT AMSL' })!;
+    expect(notamDrawable(w)).toBe(false);
+    expect(w.scope).toBe('W');
   });
   it('faller tilbake på Q-sirkel og PERM', () => {
     const n = parseNotam({ loc: 'ENGM', msg: 'A0001/26 NOTAMN\nQ) ENOR/QMRLC/IV/NBO/A/000/999/6012N01105E005\nA) ENGM B) 2611010000 C) PERM\nE) RWY 01L/19R CLSD' })!;

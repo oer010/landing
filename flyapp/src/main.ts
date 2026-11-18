@@ -6,7 +6,7 @@ import { initDatabar } from './ui/databar';
 import { initAutoWind } from './ui/autowind';
 import { initAutoNaming } from './ui/naming';
 import { fitRoute, initMap, map } from './ui/map';
-import { notamData, relevantNotams } from './ui/notamlayer';
+import { notamData, notamPopup, relevantNotams, unplacedNotams } from './ui/notamlayer';
 import { cancelDirectTo, gpsActive, simActive, startGps, startRecording, stopGps, stopRecording, stopSim } from './ui/position';
 import { state } from './ui/state';
 import { initNativeChrome, isNative, setKeepAwake } from './lib/platform';
@@ -138,6 +138,9 @@ function mapButtons(): HTMLElement {
       ),
       h('div', { class: 'ls-legend' }, '▲ obligatorisk rapporteringspunkt · △ på forespørsel'),
       h('div', { class: 'ls-legend' }, notamStatusText()),
+      unplacedNotams().length
+        ? h('details', { class: 'ls-legend ls-notams' }, h('summary', null, `${unplacedNotams().length} NOTAM for store områder (ikke i kartet)`), notamPopup(unplacedNotams()))
+        : null,
       h(
         'div',
         { class: 'ls-base' },
