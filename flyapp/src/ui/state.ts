@@ -1,4 +1,5 @@
 import type { AeroDb, Airport, Navaid } from '../lib/data';
+import { FLEET } from '../lib/fleet';
 import { distanceNm, parseCoordinate, type LatLon } from '../lib/geo';
 import type { Waypoint } from '../lib/navlog';
 import type { WindAloft } from '../lib/winds';
@@ -80,6 +81,18 @@ class AppState {
   private listeners = new Map<Events, Set<() => void>>();
 
   constructor() {
+    // Innebygde profiler (LN-FTQ, LN-FTU) legges til én gang; sletter brukeren dem, blir de borte.
+    const seeded = load<string[]>('fleetSeeded', []);
+    const add = FLEET.filter((f) => !seeded.includes(f.id) && !this.aircraft.some((a) => a.id === f.id));
+    if (add.length) {
+      // Bytt ut den urørte eksempelprofilen.
+      const onlyExample = this.aircraft.length === 1 && JSON.stringify(this.aircraft[0]) === JSON.stringify(exampleAircraft());
+      this.aircraft = [...(onlyExample ? [] : this.aircraft), ...add.map((f) => structuredClone(f))];
+      if (onlyExample || !this.aircraft.some((a) => a.id === this.currentAircraftId)) this.currentAircraftId = add[0].id;
+      save('fleetSeeded', [...seeded, ...add.map((f) => f.id)]);
+      save('aircraft', this.aircraft);
+      save('currentAircraft', this.currentAircraftId);
+    }
     if (!this.aircraft.length) this.aircraft = [exampleAircraft()];
   }
 

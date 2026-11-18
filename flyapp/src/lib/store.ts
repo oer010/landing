@@ -32,7 +32,17 @@ export interface Aircraft {
   emptyWeight: number;
   emptyArm: number;
   mtow: number;
+  /** Maks landingsvekt, maks vekt uten drivstoff og minste flyvekt (valgfrie). */
+  mlw?: number;
+  mzfw?: number;
+  minWeight?: number;
   stations: Station[];
+  /** Felles grenser for flere stasjoner (f.eks. bagasjerom til sammen). */
+  limits?: { name: string; stations: string[]; max: number }[];
+  /** Nøkkeltall fra flyhåndboken. */
+  notes?: string[];
+  /** Id til innebygd profil (kan tilbakestilles til den). */
+  fleet?: string;
   envelope: EnvelopePoint[];
 }
 

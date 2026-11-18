@@ -1,5 +1,6 @@
 import { distanceNm } from '../../lib/geo';
 import { computeWB, type WBResult } from '../../lib/wb';
+import { FLEET, fleetProfile } from '../../lib/fleet';
 import { exampleAircraft, perfOf, uid, type Aircraft } from '../../lib/store';
 import { fmt, h, numField, section, textField, toast } from '../dom';
 import { state } from '../state';
@@ -26,6 +27,10 @@ export function renderAircraft(el: HTMLElement): void {
     stations: ac.stations,
     envelope: ac.envelope,
     maxTakeoffWeight: ac.mtow,
+    maxLandingWeight: ac.mlw,
+    maxZeroFuelWeight: ac.mzfw,
+    minWeight: ac.minWeight,
+    limits: ac.limits,
     fuelBurnWeight: routeLegsFuel * ac.fuelDensity,
   });
 
@@ -72,6 +77,34 @@ export function renderAircraft(el: HTMLElement): void {
           'Slett',
         ),
       ),
+      FLEET.some((f) => !state.aircraft.some((a) => a.fleet === f.id))
+        ? h(
+            'div',
+            { class: 'row' },
+            FLEET.filter((f) => !state.aircraft.some((a) => a.fleet === f.id)).map((f) =>
+              h(
+                'button',
+                {
+                  onclick: () => {
+                    state.aircraft.push(structuredClone(f));
+                    state.currentAircraftId = f.id;
+                    persist();
+                  },
+                },
+                `+ ${f.registration} (${f.type})`,
+              ),
+            ),
+          )
+        : null,
+      ac.notes?.length
+        ? h(
+            'details',
+            { class: 'ac-notes' },
+            h('summary', null, 'Nøkkeltall fra flyhåndboken'),
+            h('ul', null, ac.notes.map((n) => h('li', null, n))),
+            h('p', { class: 'muted small' }, 'Kilde: AFM DA 40 NG (Doc. 6.01.15-E) og klubbens M&B-ark. Sjekk mot gjeldende veierapport.'),
+          )
+        : null,
       ac.id === 'example' ? h('p', { class: 'warnbox' }, 'Dette er en eksempelprofil med oppdiktede tall. Legg inn verdiene fra ditt flys veie- og balanserapport og POH før bruk.') : null,
       h(
         'div',
@@ -117,6 +150,8 @@ export function renderAircraft(el: HTMLElement): void {
         numField('Tomvekt', ac.emptyWeight, set('emptyWeight'), { unit: wu }),
         numField('Tomvekt arm', ac.emptyArm, set('emptyArm'), { unit: au, step: 0.001 }),
         numField('MTOW', ac.mtow, set('mtow'), { unit: wu }),
+        numField('Maks landingsvekt', ac.mlw ?? ac.mtow, set('mlw'), { unit: wu }),
+        numField('Maks vekt uten drivstoff', ac.mzfw ?? 0, (v) => set('mzfw')(v || undefined), { unit: wu }),
       ),
       h(
         'div',
@@ -189,12 +224,13 @@ export function renderAircraft(el: HTMLElement): void {
         {
           class: 'link',
           onclick: () => {
-            if (!confirm('Erstatte dette flyet med eksempelverdiene?')) return;
-            Object.assign(ac, { ...exampleAircraft(), id: ac.id });
+            const base = fleetProfile(ac.fleet);
+            if (!confirm(base ? `Tilbakestille ${ac.registration} til verdiene fra flyhåndboken og veiearket?` : 'Erstatte dette flyet med eksempelverdiene?')) return;
+            Object.assign(ac, { ...(base ? structuredClone(base) : exampleAircraft()), id: ac.id });
             persist();
           },
         },
-        'Tilbakestill til eksempel',
+        fleetProfile(ac.fleet) ? 'Tilbakestill til AFM-verdier' : 'Tilbakestill til eksempel',
       ),
     ),
   );

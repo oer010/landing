@@ -20,6 +20,10 @@ export interface WBInput {
   stations: Station[];
   envelope: EnvelopePoint[];
   maxTakeoffWeight: number;
+  maxLandingWeight?: number;
+  maxZeroFuelWeight?: number;
+  minWeight?: number;
+  limits?: { name: string; stations: string[]; max: number }[];
   /** Drivstoff brukt på turen (vekt), trekkes fra drivstoffstasjonene for landingstilstand. */
   fuelBurnWeight?: number;
 }
@@ -64,10 +68,17 @@ export function computeWB(i: WBInput): WBResult {
       fuelWeight += s.weight;
     }
   }
+  for (const l of i.limits ?? []) {
+    const sum = i.stations.filter((s) => l.stations.includes(s.name)).reduce((a, s) => a + s.weight, 0);
+    if (sum > l.max) errors.push(`${l.name}: ${sum} > maks ${l.max}`);
+  }
   const takeoff = state(w, m, i.envelope, i.maxTakeoffWeight);
   const burn = Math.min(i.fuelBurnWeight ?? 0, fuelWeight);
   const fuelArm = fuelWeight > 0 ? fuelArmSum / fuelWeight : 0;
-  const landing = state(w - burn, m - burn * fuelArm, i.envelope, i.maxTakeoffWeight);
+  const landing = state(w - burn, m - burn * fuelArm, i.envelope, i.maxLandingWeight ?? i.maxTakeoffWeight);
+  const zeroFuel = w - fuelWeight;
+  if (i.maxZeroFuelWeight && zeroFuel > i.maxZeroFuelWeight) errors.push(`Vekt uten drivstoff ${Math.round(zeroFuel)} > maks ${i.maxZeroFuelWeight}`);
+  if (i.minWeight && landing.weight < i.minWeight) errors.push(`Vekt ved landing ${Math.round(landing.weight)} < minste flyvekt ${i.minWeight}`);
   return { takeoff, landing, stationErrors: errors };
 }
 
