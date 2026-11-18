@@ -205,3 +205,32 @@ export function airspaceStale(airac: string, currentEdition?: string, now = new 
   if (currentEdition) return airac < currentEdition;
   return airacAgeDays(airac, now) > 120;
 }
+
+/** Luftrom det er verdt å varsle om før man flyr inn. */
+export const ALERT_KINDS: AirspaceKind[] = ['CTR', 'TMA', 'CTA', 'TIZ', 'TIA', 'RMZ', 'ATZ', 'R', 'P', 'D'];
+
+const inside = (a: AirspaceDb['airspaces'][number], p: LatLon, altFt: number) => altFt >= a.lo && altFt < effectiveHi(a) && contains(a, p);
+
+/**
+ * Luftrom flyet vil gå inn i innen `lookSec` sekunder med nåværende kurs, fart og høyde
+ * (og vertikalfart om kjent), men som det ikke er i nå.
+ */
+export function airspaceAhead(
+  db: AirspaceDb,
+  pos: LatLon,
+  trk: number,
+  gsKt: number,
+  altFt: number,
+  o: { lookSec?: number; stepSec?: number; vsFpm?: number; kinds?: AirspaceKind[] } = {},
+): { airspace: AirspaceDb['airspaces'][number]; inSec: number }[] {
+  const { lookSec = 120, stepSec = 5, vsFpm = 0, kinds = ALERT_KINDS } = o;
+  const cand = db.airspaces.filter((a) => kinds.includes(a.kind) && !inside(a, pos, altFt));
+  if (!cand.length || gsKt < 30) return [];
+  const out = new Map<AirspaceDb['airspaces'][number], number>();
+  for (let t = stepSec; t <= lookSec; t += stepSec) {
+    const p = destination(pos, trk, (gsKt * t) / 3600);
+    const alt = altFt + (vsFpm * t) / 60;
+    for (const a of cand) if (!out.has(a) && inside(a, p, alt)) out.set(a, t);
+  }
+  return [...out].map(([airspace, inSec]) => ({ airspace, inSec })).sort((a, b) => a.inSec - b.inSec);
+}

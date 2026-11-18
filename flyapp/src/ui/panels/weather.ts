@@ -5,6 +5,8 @@ import { state } from '../state';
 
 let favourites: string[] = load('wxFavourites', ['ENGM', 'ENBR', 'ENZV', 'ENVA']);
 
+import { areaForecastSection, radarSection, warningsSection } from './metwx';
+
 export function renderWeather(el: HTMLElement): void {
   const routeIds = [...new Set(state.route.waypoints.filter((w) => w.kind === 'airport' && /^[A-Z]{4}$/.test(w.id)).map((w) => w.id))];
   const ids = [...new Set([...routeIds, ...favourites])];
@@ -59,6 +61,7 @@ export function renderWeather(el: HTMLElement): void {
       h('p', { class: 'muted small' }, 'METAR/TAF: aviationweather.gov, eller MET Norge der proxy mangler. Appen erstatter ikke en offisiell værbriefing.'),
     ),
   );
+  el.append(warningsSection(), areaForecastSection(), radarSection());
 
   Promise.all([fetchMetars(ids), fetchTafs(ids)])
     .then(([metars, tafs]) => {

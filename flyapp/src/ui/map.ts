@@ -17,6 +17,8 @@ import { activeLegWinds, airportToWaypoint, navaidToWaypoint, state, userWaypoin
 import { activeLeg, directTo } from './position';
 import { renameWaypoint } from './naming';
 import { initNotamLayer, renderNotams } from './notamlayer';
+import { initObstacleLayer } from './obstaclelayer';
+import { initWxLayer } from './wxlayer';
 
 export let map: L.Map;
 
@@ -99,6 +101,8 @@ export function initMap(el: HTMLElement): L.Map {
 
   for (const l of [airspaceLayer, vfrRouteLayer, airportLayer, navaidLayer, vfrPointLayer, metarLayer]) l.addTo(map);
   initNotamLayer(map, POPUP_OPTS);
+  initObstacleLayer(map, POPUP_OPTS);
+  initWxLayer(map, POPUP_OPTS);
   for (const l of [routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
   loadVfr().then((d) => {
     vfr = d;

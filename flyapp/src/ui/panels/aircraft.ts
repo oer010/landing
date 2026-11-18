@@ -1,6 +1,7 @@
 import { distanceNm } from '../../lib/geo';
 import { computeWB, type WBResult } from '../../lib/wb';
 import { FLEET, fleetProfile } from '../../lib/fleet';
+import { takeoffSection } from './takeoff';
 import { exampleAircraft, perfOf, uid, type Aircraft } from '../../lib/store';
 import { fmt, h, numField, section, textField, toast } from '../dom';
 import { state } from '../state';
@@ -234,6 +235,7 @@ export function renderAircraft(el: HTMLElement): void {
       ),
     ),
   );
+  if (ac.icaoType === 'DA40' && ac.weightUnit === 'kg') el.append(takeoffSection(wb.takeoff.weight, wb.landing.weight));
 }
 
 function estimateTripFuel(): number {

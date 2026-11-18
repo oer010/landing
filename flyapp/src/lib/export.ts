@@ -56,39 +56,84 @@ ${pts}
 `;
 }
 
-/** Garmin FlightPlan (.fpl) – kan lastes inn i Garmin Pilot og mange panel-GPS-er. */
-export function routeToFpl(name: string, wps: Waypoint[]): string {
-  const typeOf = (w: Waypoint) => (w.kind === 'airport' ? 'AIRPORT' : w.kind === 'navaid' ? 'VOR' : 'USER WAYPOINT');
-  const unique = new Map<string, string>();
-  const ids = wps.map((w, i) => {
-    const id = gpsIdent(w, i);
-    unique.set(`${id}|${typeOf(w)}`, `    <waypoint>
+/** Garmin-type for punktet (G1000 matcher ident + type + landkode mot databasen). */
+function fplType(w: Waypoint): string {
+  if (w.kind === 'airport') return 'AIRPORT';
+  if (w.kind === 'navaid') return /\bNDB\b/.test(w.name ?? '') ? 'NDB' : 'VOR';
+  return 'USER WAYPOINT';
+}
+
+/** ICAO-landkode (to første bokstaver i ICAO-identen) – navaids får koden fra nærmeste flyplass i ruten. */
+function countryCode(w: Waypoint, wps: Waypoint[]): string {
+  if (w.kind === 'airport' && /^[A-Z]{4}$/.test(w.id)) return w.id.slice(0, 2);
+  if (w.kind === 'navaid') {
+    const ap = wps.filter((x) => x.kind === 'airport' && /^[A-Z]{4}$/.test(x.id)).sort((a, b) => Math.hypot(a.lat - w.lat, a.lon - w.lon) - Math.hypot(b.lat - w.lat, b.lon - w.lon))[0];
+    return ap ? ap.id.slice(0, 2) : '';
+  }
+  return '';
+}
+
+/**
+ * Garmin FlightPlan (.fpl, xmlschemas/FlightPlan/v1) – for G1000 (SD-kort), Garmin Pilot m.fl.
+ * Brukerpunkter får unike identer på maks 6 tegn (A–Z, 0–9), som G1000 krever.
+ */
+export function routeToFpl(name: string, wps: Waypoint[], created = new Date()): string {
+  const used = new Set<string>();
+  const userIds = new Map<string, string>();
+  const identOf = (w: Waypoint, i: number) => {
+    if (w.kind !== 'user') return w.id.toUpperCase();
+    const k = `${w.lat.toFixed(5)},${w.lon.toFixed(5)}`;
+    if (userIds.has(k)) return userIds.get(k)!;
+    let id = gpsIdent(w, i);
+    for (let n = 1; used.has(id); n++) id = `${id.slice(0, 6 - String(n).length)}${n}`;
+    used.add(id);
+    userIds.set(k, id);
+    return id;
+  };
+  const table = new Map<string, string>();
+  const points = wps.map((w, i) => {
+    const id = identOf(w, i);
+    const type = fplType(w);
+    const cc = countryCode(w, wps);
+    table.set(`${id}|${type}`, `    <waypoint>
       <identifier>${esc(id)}</identifier>
-      <type>${typeOf(w)}</type>
+      <type>${type}</type>
+      <country-code>${cc}</country-code>
       <lat>${w.lat.toFixed(6)}</lat>
       <lon>${w.lon.toFixed(6)}</lon>
+      <comment>${type === 'USER WAYPOINT' ? esc(translit(w.name ?? w.id).replace(/[^A-Z0-9 ]/g, '').slice(0, 25)) : ''}</comment>
     </waypoint>`);
-    return [id, typeOf(w)];
+    return { id, type, cc };
   });
   return `<?xml version="1.0" encoding="utf-8"?>
 <flight-plan xmlns="http://www8.garmin.com/xmlschemas/FlightPlan/v1">
+  <created>${created.toISOString().slice(0, 19)}Z</created>
   <waypoint-table>
-${[...unique.values()].join('\n')}
+${[...table.values()].join('\n')}
   </waypoint-table>
   <route>
-    <route-name>${esc(name.slice(0, 25))}</route-name>
+    <route-name>${esc(translit(name).replace(/[^A-Z0-9 /-]/g, '').slice(0, 25) || 'VFR')}</route-name>
     <flight-plan-index>1</flight-plan-index>
-${ids
+${points
   .map(
-    ([id, type]) => `    <route-point>
-      <waypoint-identifier>${esc(id)}</waypoint-identifier>
-      <waypoint-type>${type}</waypoint-type>
+    (p) => `    <route-point>
+      <waypoint-identifier>${esc(p.id)}</waypoint-identifier>
+      <waypoint-type>${p.type}</waypoint-type>
+      <waypoint-country-code>${p.cc}</waypoint-country-code>
     </route-point>`,
   )
   .join('\n')}
   </route>
 </flight-plan>
 `;
+}
+
+/** Filnavn som G1000 tåler: store bokstaver/tall, maks 8 tegn + .fpl. */
+export function fplFileName(wps: Waypoint[]): string {
+  const a = wps[0]?.id ?? 'RUTE';
+  const b = wps[wps.length - 1]?.id ?? '';
+  const base = `${translit(a).replace(/[^A-Z0-9]/g, '').slice(0, 4)}${translit(b).replace(/[^A-Z0-9]/g, '').slice(0, 4)}` || 'RUTE';
+  return `${base}.fpl`;
 }
 
 const hhmm = (min: number) => {

@@ -48,7 +48,7 @@ export function activeLegWinds(r: RouteState = state.route): (WindAloft | null)[
   return r.forecast && r.forecast.key === forecastKey(r) ? r.forecast.winds : undefined;
 }
 
-type Events = 'notam' | 'wind' | 'airspace' | 'route' | 'position' | 'settings' | 'aircraft' | 'tracks' | 'logbook' | 'checklists' | 'nav' | 'select';
+type Events = 'obstacles' | 'notam' | 'wind' | 'airspace' | 'route' | 'position' | 'settings' | 'aircraft' | 'tracks' | 'logbook' | 'checklists' | 'nav' | 'select';
 
 class AppState {
   db!: AeroDb;

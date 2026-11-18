@@ -6,7 +6,7 @@ import { state } from '../state';
 
 export function renderSettings(el: HTMLElement): void {
   const s = state.settings;
-  const check = (label: string, key: 'showAirports' | 'showNavaids' | 'showMetars' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams') =>
+  const check = (label: string, key: 'showAirports' | 'showNavaids' | 'showMetars' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams' | 'showObstacles' | 'showSigmet' | 'alertAirspace' | 'alertObstacles' | 'alertTerrain' | 'alertSound') =>
     h(
       'label',
       { class: 'check' },
@@ -35,7 +35,17 @@ export function renderSettings(el: HTMLElement): void {
       check('VFR-rapporteringspunkter (AIP)', 'showVfrPoints'),
       check('VFR-ruter (AIP)', 'showVfrCharts'),
       check('NOTAM', 'showNotams'),
+      check('Hindre (master, tårn, vindturbiner)', 'showObstacles'),
+      check('SIGMET/AIRMET-områder', 'showSigmet'),
       numField('Fartsvektor', s.vectorMin, (v) => state.updateSettings({ vectorMin: v }), { unit: 'min', min: 1, max: 30 }),
+    ),
+    section(
+      'Varsler i lufta (GPS)',
+      h('p', { class: 'muted small' }, 'Varsler øverst i kartet når GPS er på og farten er over 40 kt. Trykk på varselet for å skjule det.'),
+      check('Luftrom: varsel 2 min før du flyr inn i CTR/TMA/TIZ/RMZ og restriksjons-/fareområder', 'alertAirspace'),
+      check('Hindre: varsel når et hinder foran er mindre enn 500 ft under deg', 'alertObstacles'),
+      check('Terreng: varsel når terreng innen 2 min foran er mindre enn 500 ft under deg (krever nett)', 'alertTerrain'),
+      check('Lyd ved varsel', 'alertSound'),
     ),
     offlineSection(),
     section(

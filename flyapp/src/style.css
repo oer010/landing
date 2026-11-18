@@ -401,3 +401,38 @@ button.danger { background: #7f1d1d; border-color: #b91c1c; color: #fff; }
 .notam-upc { color: #b45309; }
 .ls-notams { max-height: 40vh; overflow: auto; }
 .ls-notams summary { cursor: pointer; font-weight: 600; }
+
+/* Hindre */
+.obst-icon { overflow: visible; }
+.obst-icon svg { filter: drop-shadow(0 0 1.5px #fff) drop-shadow(0 0 1px #fff); }
+.obst-icon span { position: absolute; left: 13px; top: 2px; font: 700 10px/1 system-ui, sans-serif; color: #9a3412; text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff; white-space: nowrap; }
+
+/* Varsler i lufta */
+#alert-bar { position: absolute; z-index: 1200; top: 8px; left: 50%; transform: translateX(-50%); width: min(92%, 520px); display: flex; flex-direction: column; gap: 6px; }
+#alert-bar > div { background: #b45309; color: #fff; font: 700 16px/1.25 system-ui, sans-serif; padding: 10px 14px; border-radius: 12px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.35); }
+#alert-bar > div.urgent { background: #b91c1c; animation: alertpulse 1s ease-in-out infinite alternate; }
+@keyframes alertpulse { from { filter: brightness(1); } to { filter: brightness(1.25); } }
+
+/* Høydeprofil */
+.terrain-svg { width: 100%; height: auto; background: #f8fafc; border-radius: 8px; }
+.terrain-svg .grid { stroke: #cbd5e1; stroke-width: 0.6; }
+.terrain-svg .axis { font: 10px system-ui, sans-serif; fill: #475569; }
+.terrain-svg .terr { fill: #a8865a; stroke: #6b4f2a; stroke-width: 1; }
+.terrain-svg .plan { fill: none; stroke: #c026d3; stroke-width: 2.5; }
+.terrain-svg .clr-bad { stroke: #dc2626; stroke-width: 2; opacity: 0.8; }
+.terrain-svg .clr-warn { stroke: #f59e0b; stroke-width: 2; opacity: 0.6; }
+.terrain-svg .obst { stroke: #b91c1c; stroke-width: 1.6; }
+.terrain-svg .wpline { stroke: #64748b; stroke-width: 0.6; stroke-dasharray: 3 3; }
+
+/* MET-vær */
+.radar-img { width: 100%; height: auto; border-radius: 8px; background: #64748b; min-height: 120px; }
+.wx-text { white-space: pre-wrap; font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 6px 0; }
+.iga summary { cursor: pointer; font-weight: 600; padding: 4px 0; }
+.wrn { border-left: 4px solid #7c3aed; padding: 4px 10px; margin: 8px 0; }
+.wrn-sig { border-color: #be123c; }
+.wrn-ws { border-color: #0891b2; }
+
+/* Start/landing */
+.perf-box { border-top: 1px solid rgb(148 163 184 / 0.3); padding-top: 8px; margin-top: 8px; }
+.perf-box h4 { margin: 4px 0 8px; }
+tr.warn td { color: #b45309; }

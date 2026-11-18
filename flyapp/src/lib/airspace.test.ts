@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { airacAgeDays, airspacesAlongRoute, airspacesAt, buildAirspaceDb, fmtLimits, kindOf, type Airspace } from './airspace';
+import { airacAgeDays, airspaceAhead, airspacesAlongRoute, airspacesAt, buildAirspaceDb, fmtLimits, kindOf, type Airspace } from './airspace';
 
 const sq = (w: number, s: number, e: number, n: number): [number, number][] => [[w, s], [e, s], [e, n], [w, n], [w, s]];
 const as = (n: string, c: string, lo: number, hi: number, ring: [number, number][], extra: Partial<Airspace> = {}): Airspace => ({
@@ -48,5 +48,22 @@ describe('luftrom', () => {
   });
   it('AIRAC-alder', () => {
     expect(airacAgeDays('2026-09-03', new Date('2026-11-17T12:00:00Z'))).toBe(75);
+  });
+});
+
+describe('luftromsvarsel', () => {
+  const db = buildAirspaceDb({
+    airac: '2026-01-01',
+    generated: '',
+    airspaces: [{ n: 'TEST CTR', c: 'D', lo: 0, hi: 2500, loFl: null, hiFl: null, f: '118.300', notam: 0, amc: 0, src: null, g: [[[10.0, 60.1], [10.4, 60.1], [10.4, 60.3], [10.0, 60.3], [10.0, 60.1]]] }],
+  });
+  it('varsler før inngang, ikke når over eller allerede inne', () => {
+    const r = airspaceAhead(db, { lat: 60.07, lon: 10.2 }, 0, 100, 1500);
+    expect(r).toHaveLength(1);
+    expect(r[0].inSec).toBeGreaterThan(60);
+    expect(r[0].inSec).toBeLessThanOrEqual(120);
+    expect(airspaceAhead(db, { lat: 60.07, lon: 10.2 }, 0, 100, 3500)).toHaveLength(0);
+    expect(airspaceAhead(db, { lat: 60.2, lon: 10.2 }, 0, 100, 1500)).toHaveLength(0);
+    expect(airspaceAhead(db, { lat: 60.07, lon: 10.2 }, 180, 100, 1500)).toHaveLength(0);
   });
 });

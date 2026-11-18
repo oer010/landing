@@ -103,6 +103,12 @@ export interface Settings {
   showVfrPoints: boolean;
   showVfrCharts: boolean;
   showNotams: boolean;
+  showObstacles: boolean;
+  showSigmet: boolean;
+  alertAirspace: boolean;
+  alertObstacles: boolean;
+  alertTerrain: boolean;
+  alertSound: boolean;
   vectorMin: number;
   disclaimerAccepted: boolean;
 }
@@ -117,6 +123,12 @@ export const DEFAULT_SETTINGS: Settings = {
   showVfrPoints: true,
   showVfrCharts: true,
   showNotams: true,
+  showObstacles: true,
+  showSigmet: true,
+  alertAirspace: true,
+  alertObstacles: true,
+  alertTerrain: true,
+  alertSound: true,
   vectorMin: 5,
   disclaimerAccepted: false,
 };

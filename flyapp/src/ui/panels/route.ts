@@ -7,8 +7,9 @@ import { fmtVar } from '../../lib/mag';
 import { computeNavlog, fmtMin, fuelPlan, legAltitudes, suggestVfrAltitude, vfrCruiseAltitudeOk, type NavlogLeg } from '../../lib/navlog';
 import { categoryOf, CATEGORY_COLORS, fetchMetars, wxError } from '../../lib/metar';
 import { isNight, sunTimes } from '../../lib/sun';
-import { download, icaoFlightPlan, routeToFpl, routeToGpx } from '../../lib/export';
+import { download, fplFileName, icaoFlightPlan, routeToFpl, routeToGpx } from '../../lib/export';
 import { perfOf, uid } from '../../lib/store';
+import { terrainSection } from './terrainprofile';
 import { computeProfile, PATTERN_AGL, type Profile } from '../../lib/profile';
 import { isNative } from '../../lib/platform';
 import { badge, clear, fmt, h, numField, section, textField, toast } from '../dom';
@@ -164,6 +165,7 @@ export function renderRoute(el: HTMLElement): void {
 
   if (legs.length) {
     el.append(navlogTable(legs, prof, ac.fuelUnit));
+    el.append(terrainSection(wps, prof));
     el.append(
       section(
         'Sammendrag',
@@ -209,7 +211,17 @@ export function renderRoute(el: HTMLElement): void {
         { class: 'row wrap' },
         h('button', { onclick: () => saveRoute(), disabled: wps.length < 2 }, '💾 Lagre'),
         h('button', { onclick: () => download(`${slug(r.name)}.gpx`, routeToGpx(r.name, wps), 'application/gpx+xml'), disabled: wps.length < 2 }, 'GPX'),
-        h('button', { onclick: () => download(`${slug(r.name)}.fpl`, routeToFpl(r.name, wps), 'application/xml'), disabled: wps.length < 2 }, 'Garmin .fpl'),
+        h(
+          'button',
+          {
+            onclick: () => {
+              download(fplFileName(wps), routeToFpl(r.name, wps), 'application/xml');
+              toast('G1000: legg filen i mappen FPL på SD-kortet (øverste kortspor på MFD) – se G1000-håndboken for din programvareversjon.', 'info', 9000);
+            },
+            disabled: wps.length < 2,
+          },
+          'G1000 / Garmin .fpl',
+        ),
         h('button', { onclick: () => printNavlog(prof), disabled: !legs.length }, '🖨 Navlogg'),
         h('button', { onclick: () => showFpl(el, prof.totalMin ?? 0, fp.enduranceMin), disabled: !legs.length }, 'ICAO-plan'),
       ),

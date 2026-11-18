@@ -3,6 +3,7 @@ import { loadDb } from './lib/data';
 import { setAirportLookup } from './lib/metar';
 import { clear, h, toast } from './ui/dom';
 import { initDatabar } from './ui/databar';
+import { initAlerts } from './ui/alerts';
 import { initAutoWind } from './ui/autowind';
 import { initAutoNaming } from './ui/naming';
 import { fitRoute, initMap, map } from './ui/map';
@@ -114,11 +115,13 @@ function mapButtons(): HTMLElement {
   // Kartlag av/på.
   const layersBtn = h('button', { class: 'fab', title: 'Kartlag' }, 'Lag');
   const sheet = h('div', { class: 'layer-sheet', hidden: true });
-  type Key = 'showAirports' | 'showNavaids' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams' | 'showMetars';
+  type Key = 'showAirports' | 'showNavaids' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams' | 'showObstacles' | 'showSigmet' | 'showMetars';
   const items: [Key, string][] = [
     ['showVfrPoints', 'VFR-rapporteringspunkter'],
     ['showVfrCharts', 'VFR-ruter (AIP)'],
     ['showNotams', 'NOTAM'],
+    ['showObstacles', 'Hindre (master, vindturbiner …)'],
+    ['showSigmet', 'SIGMET/AIRMET'],
     ['showAirspace', 'Luftrom'],
     ['showAirports', 'Flyplasser'],
     ['showNavaids', 'VOR/NDB'],
@@ -229,6 +232,7 @@ async function main(): Promise<void> {
   initAutoWind();
   initAutoNaming();
   initMap(mapEl);
+  initAlerts(document.getElementById('main')!);
   document.getElementById('loading')?.remove();
 
   state.on('select', () => {

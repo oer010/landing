@@ -6,7 +6,7 @@ import { densityAltitude, pressureAltitude, trueAirspeed } from './e6b';
 import { computeWB, pointInPolygon } from './wb';
 import { isNight, sunTimes } from './sun';
 import { categoryOf, ceilingFt, flightCategory, visibilitySm, type Metar } from './metar';
-import { routeToFpl, routeToGpx, icaoFlightPlan } from './export';
+import { fplFileName, routeToFpl, routeToGpx, icaoFlightPlan } from './export';
 import { exampleAircraft } from './store';
 import { buildDb, nearestAirports, searchAirports } from './data';
 import { parseCsv } from '../../scripts/build-data.mjs';
@@ -200,6 +200,21 @@ describe('eksport', () => {
     const f = routeToFpl('Tur', wps);
     expect(f).toContain('<type>USER WAYPOINT</type>');
     expect(f.match(/<route-point>/g)).toHaveLength(3);
+    expect(f).toContain('<country-code>EN</country-code>');
+  });
+  it('FPL for G1000: unike brukeridenter på maks 6 tegn, NDB-type', () => {
+    const f = routeToFpl('Tur til Bergen', [
+      { id: 'ENKJ', kind: 'airport', lat: 59.97, lon: 11.04 },
+      { id: 'NORDKISA', kind: 'user', lat: 60.18, lon: 11.26 },
+      { id: 'NORDKISA 2', kind: 'user', lat: 60.2, lon: 11.3 },
+      { id: 'GM', name: 'Gardermoen NDB', kind: 'navaid', lat: 60.2, lon: 11.1 },
+      { id: 'ENBR', kind: 'airport', lat: 60.29, lon: 5.22 },
+    ]);
+    expect(f).toContain('<identifier>NORDKI</identifier>');
+    expect(f).toContain('<identifier>NORDK1</identifier>');
+    expect(f).toContain('<type>NDB</type>');
+    expect(f).toContain('<route-name>TUR TIL BERGEN</route-name>');
+    expect(fplFileName([{ id: 'ENKJ', kind: 'airport', lat: 0, lon: 0 }, { id: 'ENBR', kind: 'airport', lat: 0, lon: 0 }])).toBe('ENKJENBR.fpl');
   });
   it('ICAO flightplan', () => {
     const t = icaoFlightPlan({ aircraft: exampleAircraft(), waypoints: wps, eobt: new Date('2026-06-01T10:30:00Z'), eetMin: 95, enduranceMin: 300, altitudeFt: 5500, tas: 105, persons: 2 });
