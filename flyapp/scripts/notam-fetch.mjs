@@ -71,25 +71,30 @@ async function search(designators, offset) {
 }
 
 const notams = new Map();
-for (let i = 0; i < locs.length; i += 15) {
-  const batch = locs.slice(i, i + 15);
+const skipped = [];
+// Én lokasjon per spørring: FAA avviser hele spørringen om én kode er ukjent for dem.
+for (const loc of locs) {
   for (let offset = 0; ; ) {
-    const d = await search(batch, offset);
+    const d = await search([loc], offset);
+    if (d.error) {
+      skipped.push(loc);
+      break;
+    }
     const list = d.notamList ?? [];
-    if (!notams.size && !list.length && i === 0) console.log('Svar uten NOTAM:', JSON.stringify(d).slice(0, 800));
-    if (list.length && !notams.size) console.log('Eksempel:', JSON.stringify(list[0]).slice(0, 800));
+    if (list.length && !notams.size) console.log('Eksempel:', JSON.stringify(list[0]).slice(0, 600));
     for (const n of list) {
       const msg = (n.icaoMessage || '').trim();
       if (!msg) continue;
       const id = msg.match(/^[A-Z]\d{4}\/\d{2}/)?.[0] ?? `${n.facilityDesignator}-${n.notamNumber}`;
-      notams.set(id, { loc: n.icaoId || n.facilityDesignator, msg });
+      notams.set(id, { loc: n.icaoId || n.facilityDesignator || loc, msg });
     }
     const total = d.totalNotamCount ?? 0;
     offset += list.length;
     if (!list.length || offset >= total) break;
   }
-  console.log(`${batch[0]}…: ${notams.size} totalt`);
+  await new Promise((r) => setTimeout(r, 150));
 }
+console.log(`${notams.size} NOTAM fra ${locs.length - skipped.length} lokasjoner. Ukjent hos FAA: ${skipped.join(' ') || '–'}`);
 
 if (!notams.size) {
   console.error('Fant ingen NOTAM – beholder forrige fil');
