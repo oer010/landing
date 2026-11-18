@@ -65,9 +65,15 @@ export async function routeTerrain(wps: LatLon[], stepNm = 0.3, sideNm = 1, fetc
 }
 
 /** Høyeste terreng foran flyet innen `lookMin` minutter (±0.3 NM). */
-export async function terrainAhead(pos: LatLon, trk: number, gsKt: number, lookMin = 2, fetcher: typeof fetch = fetch): Promise<{ ft: number; distNm: number } | null> {
+export async function terrainAhead(
+  pos: LatLon,
+  trk: number,
+  gsKt: number,
+  lookMin = 2,
+  fetcher: typeof fetch = fetch,
+): Promise<{ ft: number; distNm: number; groundFt: number | null } | null> {
   const range = Math.max(1, (gsKt * lookMin) / 60);
-  const pts: { p: LatLon; d: number }[] = [];
+  const pts: { p: LatLon; d: number }[] = [{ p: pos, d: 0 }];
   for (let d = 0.25; d <= range; d += 0.25)
     for (const off of [0, 0.3, -0.3]) {
       const c = destination(pos, trk, d);
@@ -77,9 +83,12 @@ export async function terrainAhead(pos: LatLon, trk: number, gsKt: number, lookM
     pts.map((x) => x.p),
     fetcher,
   );
-  let best: { ft: number; distNm: number } | null = null;
-  z.forEach((v, i) => {
-    if (v !== null && (!best || v > best.ft)) best = { ft: v, distNm: pts[i].d };
-  });
-  return best;
+  // Første punkt er bakken rett under flyet.
+  const groundFt = z[0];
+  let best: { ft: number; distNm: number; groundFt: number | null } | null = null;
+  for (let i = 1; i < z.length; i++) {
+    const v = z[i];
+    if (v !== null && (!best || v > best.ft)) best = { ft: v, distNm: pts[i].d, groundFt };
+  }
+  return best ?? (groundFt !== null ? { ft: 0, distNm: 0, groundFt } : null);
 }

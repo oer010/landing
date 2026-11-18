@@ -447,3 +447,5 @@ tr.warn td { color: #b45309; }
 .rwy-diagram .wind { stroke: #0284c7; stroke-width: 3; }
 .rwy-diagram .wind-head { fill: #0284c7; }
 .rwy-diagram .wind-lbl { font: 700 11px system-ui, sans-serif; fill: #0369a1; }
+#alert-bar > div { position: relative; padding-right: 40px; cursor: pointer; }
+#alert-bar .alert-x { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 18px; opacity: 0.85; }
