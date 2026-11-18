@@ -1,4 +1,5 @@
 import { h, section, numField } from '../dom';
+import { offlineSection } from './offline';
 import { airspaceStale } from '../../lib/airspace';
 import { getAirspaceDb } from '../map';
 import { state } from '../state';
@@ -21,7 +22,8 @@ export function renderSettings(el: HTMLElement): void {
         h('span', null, 'Bakgrunnskart'),
         h(
           'select',
-          { onchange: (e: Event) => state.updateSettings({ baseLayer: (e.target as HTMLSelectElement).value as 'osm' | 'topo' }) },
+          { onchange: (e: Event) => state.updateSettings({ baseLayer: (e.target as HTMLSelectElement).value as 'osm' | 'topo' | 'kv' }) },
+          h('option', { value: 'kv', selected: s.baseLayer === 'kv' }, 'Topografisk (Kartverket) – kan lastes ned'),
           h('option', { value: 'topo', selected: s.baseLayer === 'topo' }, 'Topografisk (OpenTopoMap)'),
           h('option', { value: 'osm', selected: s.baseLayer === 'osm' }, 'Veikart (OpenStreetMap)'),
         ),
@@ -35,6 +37,7 @@ export function renderSettings(el: HTMLElement): void {
       check('NOTAM', 'showNotams'),
       numField('Fartsvektor', s.vectorMin, (v) => state.updateSettings({ vectorMin: v }), { unit: 'min', min: 1, max: 30 }),
     ),
+    offlineSection(),
     section(
       'Luftrom',
       (() => {
@@ -74,7 +77,7 @@ export function renderSettings(el: HTMLElement): void {
         'Kun for VFR-planlegging og situasjonsforståelse. Ikke godkjent for navigasjon. Data kan være feil eller utdaterte – bruk alltid gjeldende AIP, VFR-kart, NOTAM og offisiell værbriefing.',
       ),
       h('p', { class: 'muted small' }, `Versjon: ${__BUILD__}`),
-      h('p', { class: 'muted small' }, 'Kart © OpenStreetMap-bidragsytere og OpenTopoMap. Luftrom: AIP Norge via luftrom.info. Vær: aviationweather.gov / MET Norge. Vind: Open-Meteo. Misvisning: NOAA World Magnetic Model 2025.'),
+      h('p', { class: 'muted small' }, 'Kart © Kartverket (CC BY 4.0), OpenStreetMap-bidragsytere og OpenTopoMap. Luftrom: AIP Norge via luftrom.info. Vær: aviationweather.gov / MET Norge. Vind: Open-Meteo. Misvisning: NOAA World Magnetic Model 2025.'),
     ),
   );
 }

@@ -144,8 +144,8 @@ function mapButtons(): HTMLElement {
       h(
         'div',
         { class: 'ls-base' },
-        (['topo', 'osm'] as const).map((b) =>
-          h('button', { class: state.settings.baseLayer === b ? 'on' : '', onclick: () => state.updateSettings({ baseLayer: b }) }, b === 'topo' ? 'Topografisk' : 'Veikart'),
+        (['kv', 'topo', 'osm'] as const).map((b) =>
+          h('button', { class: state.settings.baseLayer === b ? 'on' : '', onclick: () => state.updateSettings({ baseLayer: b }) }, b === 'kv' ? 'Kartverket' : b === 'topo' ? 'OpenTopo' : 'Veikart'),
         ),
       ),
     );

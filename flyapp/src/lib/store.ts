@@ -93,7 +93,9 @@ export interface Checklist {
 }
 
 export interface Settings {
-  baseLayer: 'osm' | 'topo';
+  baseLayer: 'osm' | 'topo' | 'kv';
+  /** Satt når standardkartet er byttet til Kartverket (én gang). */
+  mapV2?: boolean;
   showAirports: boolean;
   showNavaids: boolean;
   showMetars: boolean;
@@ -106,7 +108,8 @@ export interface Settings {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  baseLayer: 'topo',
+  baseLayer: 'kv',
+  mapV2: true,
   showAirports: true,
   showNavaids: true,
   showMetars: true,

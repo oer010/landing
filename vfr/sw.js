@@ -1,14 +1,17 @@
 // Service worker: appen og flyplassdata virker offline, og kartfliser du har
 // sett, caches slik at de også er tilgjengelige uten dekning i lufta.
-const APP_CACHE = 'vfr-app-v18';
+const APP_CACHE = 'vfr-app-v19';
 const TILE_CACHE = 'vfr-tiles-v1';
+const OFFLINE_CACHE = 'vfr-offline-v1';
 const MAX_TILES = 6000;
+// Fylles inn ved bygging (vite.config.ts): alle JS/CSS-filer i appen.
+self.__ASSETS = ["./assets/index-CzG47MoW.js","./assets/esm-Bi0keFVd.js","./assets/esm-DrwXXTOS.js","./assets/esm-Dy6BZa3c.js","./assets/esm-HhNhon7r.js","./assets/web-BYGdck7l.js","./assets/web-CeTqq5K7.js","./assets/web-tifw045P.js","./assets/web-yq2msUA3.js","./assets/index-BPACCgqh.css"];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches
       .open(APP_CACHE)
-      .then((c) => c.addAll(['./', './index.html', './data/airports.json', './data/airspace.json', './data/aip-freq.json', './data/vfr.json', './manifest.webmanifest', './icon.svg', './apple-touch-icon.png']))
+      .then((c) => c.addAll([...self.__ASSETS, './', './index.html', './data/airports.json', './data/airspace.json', './data/aip-freq.json', './data/vfr.json', './manifest.webmanifest', './icon.svg', './apple-touch-icon.png']))
       .then(() => self.skipWaiting()),
   );
 });
@@ -17,12 +20,12 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => ![APP_CACHE, TILE_CACHE].includes(k)).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => ![APP_CACHE, TILE_CACHE, OFFLINE_CACHE].includes(k)).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
 
-const isTile = (url) => /tile\.(openstreetmap|opentopomap)\.org|tiles\.openaip\.net/.test(url.hostname);
+const isTile = (url) => /tile\.(openstreetmap|opentopomap)\.org|tiles\.openaip\.net|cache\.kartverket\.no/.test(url.hostname);
 
 async function trimTiles() {
   const cache = await caches.open(TILE_CACHE);
@@ -40,7 +43,8 @@ self.addEventListener('fetch', (e) => {
   if (isTile(url)) {
     e.respondWith(
       caches.open(TILE_CACHE).then(async (cache) => {
-        const hit = await cache.match(e.request);
+        // Nedlastede kart først (lagret med vanlig URL), så nylig viste fliser.
+        const hit = (await (await caches.open(OFFLINE_CACHE)).match(url.href)) ?? (await cache.match(e.request));
         if (hit) return hit;
         const res = await fetch(e.request);
         if (res.ok || res.type === 'opaque') {
@@ -65,7 +69,11 @@ self.addEventListener('fetch', (e) => {
           }
           return res;
         })
-        .catch(() => caches.match(e.request).then((r) => r ?? caches.match('./index.html'))),
+        .catch(() =>
+          caches
+            .match(url.href, { ignoreSearch: true, ignoreVary: true })
+            .then((r) => r ?? (e.request.mode === 'navigate' ? caches.match('./index.html') : Response.error())),
+        ),
     );
   }
 });

@@ -52,7 +52,13 @@ type Events = 'notam' | 'wind' | 'airspace' | 'route' | 'position' | 'settings' 
 
 class AppState {
   db!: AeroDb;
-  settings: Settings = { ...DEFAULT_SETTINGS, ...load<Partial<Settings>>('settings', {}) };
+  settings: Settings = (() => {
+    const saved = load<Partial<Settings>>('settings', {});
+    const st: Settings = { ...DEFAULT_SETTINGS, ...saved };
+    // Kartverkets topografiske kart er standard (bedre i Norge, og kan lastes ned for bruk uten nett).
+    if (!saved.mapV2) Object.assign(st, { baseLayer: 'kv', mapV2: true });
+    return st;
+  })();
   aircraft: Aircraft[] = load<Aircraft[]>('aircraft', []);
   currentAircraftId: string = load('currentAircraft', 'example');
   route: RouteState = load<RouteState>('route', {

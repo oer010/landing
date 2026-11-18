@@ -4,6 +4,7 @@ import type { Airport, Navaid } from '../lib/data';
 import { bearingTrue, destination, distanceNm, fmtHdg, formatLatLon, type LatLon } from '../lib/geo';
 import { CATEGORY_COLORS, categoryOf, fetchMetars, fetchMetarsInBox, metarAgeMin, type Metar } from '../lib/metar';
 import { AIRPORT_TYPE_TEXT } from '../lib/data';
+import { KV_URL } from '../lib/offline';
 import { loadVfr, type VfrData, type VfrPoint, type VfrRoute } from '../lib/vfrdata';
 import { declination, fmtVar, trueToMag } from '../lib/mag';
 import { sunTimes } from '../lib/sun';
@@ -29,6 +30,14 @@ const POPUP_OPTS: L.PopupOptions & { maxHeight?: number } = {
 };
 
 const BASE_LAYERS = {
+  kv: () =>
+    L.tileLayer(KV_URL, {
+      maxZoom: 17,
+      maxNativeZoom: 17,
+      // CORS-forespørsler, så lagrede fliser ikke blir «opaque» (de teller mye mer i lagringskvoten).
+      crossOrigin: true,
+      attribution: 'Kart: © <a href="https://www.kartverket.no/">Kartverket</a> (CC BY 4.0)',
+    }),
   topo: () =>
     L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
       maxZoom: 17,
