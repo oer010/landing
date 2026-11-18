@@ -116,7 +116,7 @@ function mapButtons(): HTMLElement {
   type Key = 'showAirports' | 'showNavaids' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showMetars';
   const items: [Key, string][] = [
     ['showVfrPoints', 'VFR-rapporteringspunkter'],
-    ['showVfrCharts', 'VFR-rutekart (AIP)'],
+    ['showVfrCharts', 'VFR-ruter (AIP)'],
     ['showAirspace', 'Luftrom'],
     ['showAirports', 'Flyplasser'],
     ['showNavaids', 'VOR/NDB'],

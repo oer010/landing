@@ -107,7 +107,7 @@ async function ifrPointNames(root) {
  * Henter alt fra AIP Norge i én runde: frekvenser (AD 2.18) og VFR-rapporteringspunkter
  * fra VFR-/innflygingskartene. `ap` = Map ident → {lat, lon} for fornuftssjekk.
  */
-export async function fetchAipData({ ap = new Map(), chartDir = null, concurrency = 6, log = console.log } = {}) {
+export async function fetchAipData({ ap = new Map(), concurrency = 6, log = console.log } = {}) {
   const { edition, base, root, idents } = await currentEdition();
   const airports = {};
   const pages = new Map();
@@ -132,7 +132,7 @@ export async function fetchAipData({ ap = new Map(), chartDir = null, concurrenc
   try {
     const { buildVfrPoints } = await import('./vfr.mjs');
     const ifrNames = await ifrPointNames(root);
-    vfr = await buildVfrPoints({ pages: [...pages].sort(), graphicsBase: `${base}${edition}-AIRAC/`, ifrNames, ap, get: getRes, chartDir, log });
+    vfr = await buildVfrPoints({ pages: [...pages].sort(), graphicsBase: `${base}${edition}-AIRAC/`, ifrNames, ap, get: getRes, log });
   } catch (e) {
     log(`Advarsel: VFR-punkter feilet: ${e.message}`);
   }

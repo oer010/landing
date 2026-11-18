@@ -31,7 +31,7 @@ export function renderSettings(el: HTMLElement): void {
       check('METAR-farger', 'showMetars'),
       check('Luftrom (Norge, fra AIP)', 'showAirspace'),
       check('VFR-rapporteringspunkter (AIP)', 'showVfrPoints'),
-      check('VFR-rutekart (AIP, lagt over kartet)', 'showVfrCharts'),
+      check('VFR-ruter (AIP)', 'showVfrCharts'),
       numField('Fartsvektor', s.vectorMin, (v) => state.updateSettings({ vectorMin: v }), { unit: 'min', min: 1, max: 30 }),
     ),
     section(

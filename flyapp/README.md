@@ -101,7 +101,7 @@ AIRAC-datoen vises i appen, med advarsel når dataene er eldre enn én syklus (2
 - Kart: © OpenStreetMap-bidragsytere, OpenTopoMap (CC-BY-SA)
 - Vær: [aviationweather.gov Data API](https://aviationweather.gov/data/api/)
 - Luftrom: AIP Norge, konvertert av [luftrom.info / relet/pg-xc](https://github.com/relet/pg-xc) (uten ansvar – sjekk gjeldende AIP og NOTAM). Hentes av `npm run data`.
-- VFR-rapporteringspunkter: koordinattabellene på VFR-/innflygingskartene i AIP Norge (AD 2 XXXX 6-x). VFR-rutekart (Bergen, Kjeller, Rygge, Værnes) georefereres automatisk mot punktene (±12–45 m) og legges over kartet. Krever `pdftotext`/`pdftocairo` (poppler-utils) ved `npm run data`.
+- VFR-rapporteringspunkter: koordinattabellene på VFR-/innflygingskartene i AIP Norge (AD 2 XXXX 6-x). VFR-ruter (Bergen, Rygge, Værnes) leses ut som linjer fra rutekartene, som georefereres mot punktene (±12–50 m), med piler, høyder («MAX 1000») og kartets høydemerknad; punkter skilles i obligatoriske (▲) og på forespørsel (△). Krever `pdftotext`/`pdftocairo` (poppler-utils) ved `npm run data`.
 - Stedsnavn for rutepunkter: [Kartverket stedsnavn-API](https://ws.geonorge.no/stedsnavn/v1/)
 - Vind i høyden: [Open-Meteo](https://open-meteo.com/). METAR/TAF uten proxy: [MET Norge](https://api.met.no/)
 - Misvisning: NOAA World Magnetic Model 2025 (via `geomagnetism`)

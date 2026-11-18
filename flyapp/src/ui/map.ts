@@ -4,8 +4,7 @@ import type { Airport, Navaid } from '../lib/data';
 import { bearingTrue, destination, distanceNm, fmtHdg, formatLatLon, type LatLon } from '../lib/geo';
 import { CATEGORY_COLORS, categoryOf, fetchMetars, fetchMetarsInBox, metarAgeMin, type Metar } from '../lib/metar';
 import { AIRPORT_TYPE_TEXT } from '../lib/data';
-import { loadVfr, type VfrData, type VfrPoint } from '../lib/vfrdata';
-import { AffineImageOverlay } from './imageoverlay';
+import { loadVfr, type VfrData, type VfrPoint, type VfrRoute } from '../lib/vfrdata';
 import { declination, fmtVar, trueToMag } from '../lib/mag';
 import { sunTimes } from '../lib/sun';
 import { airspacesAt, fmtLimits, KIND_ADVICE, KIND_STYLE, KIND_TEXT, loadAirspace, type AirspaceDb, type AirspaceKind } from '../lib/airspace';
@@ -45,7 +44,7 @@ const BASE_LAYERS = {
 let baseLayer: L.TileLayer | null = null;
 const airspaceLayer = L.layerGroup();
 const vfrPointLayer = L.layerGroup();
-const vfrChartLayer = L.layerGroup();
+const vfrRouteLayer = L.layerGroup();
 let vfr: VfrData | null = null;
 let asDb: AirspaceDb | null = null;
 const airportLayer = L.layerGroup();
@@ -88,14 +87,10 @@ export function initMap(el: HTMLElement): L.Map {
   });
   new (NmScale as unknown as new (o: L.Control.ScaleOptions) => L.Control)({ position: 'bottomleft', imperial: false, maxWidth: 160 }).addTo(map);
 
-  // Egen rute for VFR-kartbilder: under luftrom/rute, og «multiply» så hvit bakgrunn blir gjennomsiktig.
-  const chartPane = map.createPane('vfrcharts');
-  chartPane.style.zIndex = '250';
-  chartPane.style.mixBlendMode = 'multiply';
-  for (const l of [vfrChartLayer, airspaceLayer, airportLayer, navaidLayer, vfrPointLayer, metarLayer, routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
+  for (const l of [airspaceLayer, vfrRouteLayer, airportLayer, navaidLayer, vfrPointLayer, metarLayer, routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
   loadVfr().then((d) => {
     vfr = d;
-    renderVfrCharts();
+    renderVfrRoutes();
     renderAerodata();
     state.emit('airspace');
   });
@@ -139,7 +134,6 @@ export function initMap(el: HTMLElement): L.Map {
     else if (!openNearestAt(e.containerPoint)) showAirspacesAt(p);
   });
   map.on('zoomend', updateAirspaceLabels);
-  map.on('zoomend', () => (chartPane.style.display = map.getZoom() >= 8 ? '' : 'none'));
   loadAirspace().then((db) => {
     asDb = db;
     state.emit('airspace');
@@ -196,7 +190,7 @@ export const isEditMode = () => editMode;
 
 function applySettings(): void {
   const s = state.settings;
-  renderVfrCharts();
+  renderVfrRoutes();
   if (baseLayer) baseLayer.remove();
   baseLayer = BASE_LAYERS[s.baseLayer]().addTo(map);
   baseLayer.bringToBack();
@@ -426,7 +420,11 @@ export function renderAerodata(): void {
         icon: L.divIcon({
           className: 'vrp-icon',
           // Som på AIP-kartene: fylt ▲ = obligatorisk, åpen △ = på forespørsel.
-          html: `<svg viewBox="0 0 20 18" width="18" height="16"><polygon points="10,1 19,17 1,17" fill="${p.c === 1 ? '#1d4ed8' : 'rgb(255 255 255 / 0.75)'}" stroke="#1d4ed8" stroke-width="2.2" stroke-linejoin="round"${p.c === undefined ? ' stroke-dasharray="3 2"' : ''}/></svg>${z >= 9 ? `<span${p.c === 1 ? ' class="comp"' : ''}>${p.n}</span>` : ''}`,
+          html: `${
+            p.hold
+              ? '<svg viewBox="0 0 20 20" width="20" height="20"><circle cx="10" cy="10" r="8" fill="rgb(255 255 255 / 0.6)" stroke="#0f172a" stroke-width="2" stroke-dasharray="3 2"/></svg>'
+              : `<svg viewBox="0 0 20 18" width="18" height="16"><polygon points="10,1 19,17 1,17" fill="${p.c === 1 ? '#1d4ed8' : 'rgb(255 255 255 / 0.75)'}" stroke="#1d4ed8" stroke-width="2.2" stroke-linejoin="round"${p.c === undefined ? ' stroke-dasharray="3 2"' : ''}/></svg>`
+          }${z >= 9 ? `<span${p.c === 1 ? ' class="comp"' : ''}>${p.n}${p.alt ? ` · ${fmtAlt(p.alt)}` : ''}</span>` : ''}`,
           iconSize: [30, 30],
           iconAnchor: [15, 17],
         }),
@@ -845,16 +843,83 @@ export function vfrChartLinks(ident: string): HTMLElement | null {
   return h(
     'div',
     { class: 'p-charts' },
-    h('div', { class: 'p-muted' }, `VFR: ${n} rapporteringspunkter${vfr!.overlays.some((o) => o.ad === ident) ? ' · rutekart på kartet' : ''}`),
+    h('div', { class: 'p-muted' }, `VFR: ${n} rapporteringspunkter${vfr!.routes.some((o) => o.ad === ident) ? ` · ${vfr!.routes.filter((o) => o.ad === ident).length} VFR-ruter på kartet` : ''}`),
     list.map((c) => h('a', { href: c.url, target: '_blank', rel: 'noopener', class: 'p-chartlink' }, `📄 ${c.title}`)),
   );
 }
 
-function renderVfrCharts(): void {
-  vfrChartLayer.clearLayers();
+/** Nærmeste VFR-punkt (inkl. venteområder) til en posisjon, innen 3 km. */
+function nearestVfrPoint(lat: number, lon: number, ad: string): VfrPoint | null {
+  let best: { d: number; p: VfrPoint } | null = null;
+  for (const p of vfr?.points ?? []) {
+    if (!p.ad.includes(ad)) continue;
+    const d = distanceNm({ lat, lon }, p);
+    if (d < 1.7 && (!best || d < best.d)) best = { d, p };
+  }
+  return best?.p ?? null;
+}
+
+const fmtAlt = (a?: { max?: number; min?: number } | null) =>
+  a ? [a.min ? `MIN ${a.min} ft` : '', a.max ? `MAX ${a.max} ft` : ''].filter(Boolean).join(' · ') : '';
+
+function renderVfrRoutes(): void {
+  vfrRouteLayer.clearLayers();
   if (!vfr || !state.settings.showVfrCharts) return;
-  for (const o of vfr.overlays)
-    new AffineImageOverlay(`./data/${o.img}`, o.tl, o.tr, o.bl, { pane: 'vfrcharts', opacity: 0.95, className: 'vfr-chart-img' }).addTo(vfrChartLayer);
+  for (const r of vfr.routes) {
+    const ll = r.pts.map(([a, b]) => [a, b] as [number, number]);
+    L.polyline(ll, { color: '#fff', weight: 6, opacity: 0.85, interactive: false }).addTo(vfrRouteLayer);
+    L.polyline(ll, { color: '#0f172a', weight: 2.6, opacity: 0.95, interactive: false }).addTo(vfrRouteLayer);
+    // Bred, usynlig treffsone for fingeren.
+    L.polyline(ll, { color: '#000', opacity: 0, weight: 22, bubblingMouseEvents: false })
+      .bindPopup(() => vfrRoutePopup(r), POPUP_OPTS)
+      .addTo(vfrRouteLayer);
+    // Pilspisser i endene som på AIP-kartet.
+    const arrow = (tip: [number, number], from: [number, number]) => {
+      const brg = bearingTrue({ lat: from[0], lon: from[1] }, { lat: tip[0], lon: tip[1] });
+      L.marker(tip, {
+        icon: L.divIcon({ className: 'vfr-arrow', html: `<svg viewBox="0 0 12 12" width="12" height="12" style="transform:rotate(${brg}deg)"><polygon points="6,0 11,11 6,8 1,11" fill="#0f172a" stroke="#fff" stroke-width="1"/></svg>`, iconSize: [12, 12], iconAnchor: [6, 6] }),
+        interactive: false,
+        keyboard: false,
+      }).addTo(vfrRouteLayer);
+    };
+    if (r.arrowEnd && ll.length > 1) arrow(ll[ll.length - 1], ll[Math.max(0, ll.length - 3)]);
+    if (r.arrowStart && ll.length > 1) arrow(ll[0], ll[Math.min(ll.length - 1, 2)]);
+  }
+}
+
+function vfrRoutePopup(r: VfrRoute): HTMLElement {
+  const a = nearestVfrPoint(r.pts[0][0], r.pts[0][1], r.ad);
+  const b = nearestVfrPoint(r.pts[r.pts.length - 1][0], r.pts[r.pts.length - 1][1], r.ad);
+  const nm = (p: VfrPoint | null) => p?.n ?? 'punkt';
+  const dir = r.arrowStart && r.arrowEnd ? '⇄' : r.arrowEnd ? '→' : r.arrowStart ? '←' : '–';
+  const endAlts = [a, b].filter((p): p is VfrPoint => !!p?.alt).map((p) => `${p.n}: ${fmtAlt(p.alt)}`);
+  const toWp = (p: VfrPoint): Waypoint => ({ id: p.n, name: `VFR-punkt ${p.ad.join('/')}`, kind: 'user', lat: p.lat, lon: p.lon, manualName: true });
+  return h(
+    'div',
+    { class: 'popup' },
+    h('div', { class: 'p-title' }, `${nm(a)} ${dir} ${nm(b)}`),
+    h('div', { class: 'p-kind' }, `VFR-rute · ${r.ad} ${state.db.byIdent.get(r.ad)?.name ?? ''}`),
+    h(
+      'table',
+      { class: 'p-table' },
+      h(
+        'tbody',
+        null,
+        row('Høyde', h('strong', null, fmtAlt(r.alt) || 'Ikke angitt ved linjen')),
+        endAlts.length ? row('Ved punktene', endAlts.join(' · ')) : null,
+        r.note ? row('Merknad', r.note) : null,
+        row('Lengde', `${distanceNm({ lat: r.pts[0][0], lon: r.pts[0][1] }, { lat: r.pts[r.pts.length - 1][0], lon: r.pts[r.pts.length - 1][1] }).toFixed(1)} NM`),
+        row('Kilde', `AIP Norge ${vfr?.edition ?? ''}, ${r.chart} (±${r.accuracyM} m). Sjekk alltid kartet.`),
+      ),
+    ),
+    a && b
+      ? h(
+          'div',
+          { class: 'popup-actions' },
+          h('button', { class: 'p-primary', onclick: () => (map.closePopup(), state.setWaypoints([...state.route.waypoints, toWp(a), toWp(b)])) }, '+ Legg ruten i min rute'),
+        )
+      : null,
+  );
 }
 
 function vfrPointPopup(p: VfrPoint): HTMLElement {
@@ -867,7 +932,7 @@ function vfrPointPopup(p: VfrPoint): HTMLElement {
     h(
       'div',
       { class: `p-kind ${p.c === 1 ? 'comp' : ''}` },
-      p.c === 1 ? '▲ Obligatorisk rapporteringspunkt' : p.c === 0 ? '△ Rapporteringspunkt på forespørsel' : 'Rapporteringspunkt (type ukjent – sjekk kartet)',
+      p.hold ? '◯ Venteområde (holding)' : p.c === 1 ? '▲ Obligatorisk rapporteringspunkt' : p.c === 0 ? '△ Rapporteringspunkt på forespørsel' : 'Rapporteringspunkt (type ukjent – sjekk kartet)',
     ),
     h(
       'div',
@@ -886,6 +951,7 @@ function vfrPointPopup(p: VfrPoint): HTMLElement {
       h(
         'tbody',
         null,
+        p.alt ? row('Høyde', h('strong', null, fmtAlt(p.alt))) : null,
         row('Posisjon', formatLatLon(p)),
         me ? row('Fra deg', me) : null,
         row(

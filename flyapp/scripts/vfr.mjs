@@ -32,7 +32,7 @@ export function parseChartPoints(text) {
     // Høydetall/hinder etter navnet («NYLAND 1129»), og «|»-rester.
     name = name.replace(/(\s+\d+)+$/, '').replace(/^[|\s]+/, '').trim();
     // Søppel: må ha et ord med minst tre bokstaver, og ikke være teknisk tekst.
-    if (!/[A-ZÆØÅ]{3,}/.test(name) || /^(GND|AMSL|HLDG|MSL|FL|MA)\b/.test(name)) continue;
+    if (!/[A-ZÆØÅ]{3,}/.test(name) || /^(GND|AMSL|MSL|FL|MA)\b/.test(name)) continue;
     const lat = +m[2] + +m[3] / 60 + +m[4] / 3600;
     const lon = +m[6] + +m[7] / 60 + +m[8] / 3600;
     out.push({ n: name, lat: m[5] === 'S' ? -lat : lat, lon: m[9] === 'W' ? -lon : lon });
@@ -75,7 +75,7 @@ async function pdfText(buf) {
  * @param ifrNames  Set med 5-bokstavs IFR-punkter (ENR 4.4)
  * @param ap  Map ident → {lat, lon} (flyplassens posisjon, for fornuftssjekk)
  */
-export async function buildVfrPoints({ pages, graphicsBase, ifrNames, ap, get, chartDir = null, log = console.log }) {
+export async function buildVfrPoints({ pages, graphicsBase, ifrNames, ap, get, log = console.log }) {
   try {
     await run('pdftotext', ['-v']);
   } catch {
@@ -84,10 +84,8 @@ export async function buildVfrPoints({ pages, graphicsBase, ifrNames, ap, get, c
   }
   const points = [];
   const charts = {};
-  const overlays = [];
+  const routes = [];
   let pdfs = 0;
-  const georef = chartDir ? (await import('./vfrcharts.mjs')).georefChart : null;
-  if (chartDir) await (await import('node:fs/promises')).mkdir(chartDir, { recursive: true });
   for (const [ident, html] of pages) {
     const list = vfrCharts(html, ident);
     if (list.length) charts[ident] = list.map((c) => ({ title: c.title, page: c.page, url: graphicsBase + c.href }));
@@ -103,26 +101,14 @@ export async function buildVfrPoints({ pages, graphicsBase, ifrNames, ap, get, c
         continue;
       }
       const vfrOnly = isVfrChart(c.title);
-      // Rene VFR-kart (ruter, helikopter, VFR-kart) legges oppå kartet når de kan georefereres presist.
-      if (georef && vfrOnly) {
-        const file = `${ident}-${overlays.filter((o) => o.ad === ident).length + 1}.jpg`;
-        try {
-          const g = await georef(buf, join(chartDir, file));
-          if (g && g.controlPoints >= 6 && g.residualM <= 80) {
-            overlays.push({ ad: ident, title: c.title, page: c.page, img: `vfrcharts/${file}`, tl: g.tl, tr: g.tr, bl: g.bl, accuracyM: g.residualM, controlPoints: g.controlPoints });
-            log(`  ${ident} ${c.title}: lagt over kartet (±${g.residualM} m, ${g.controlPoints} punkter)`);
-          } else {
-            await rm(join(chartDir, file), { force: true });
-            log(`  ${ident} ${c.title}: ikke presis nok til å legges over kartet${g ? ` (±${g.residualM} m, ${g.controlPoints} punkter)` : ''}`);
-          }
-        } catch (e) {
-          log(`  ${ident} ${c.title}: georeferering feilet: ${e.message}`);
-        }
-      }
       // Symboler på kartet: obligatorisk (▲) / på forespørsel (△), og punkter som bare står på kartet.
       let found;
       try {
-        found = (await chartPoints(buf)).points;
+        const res = await chartPoints(buf);
+        found = res.points;
+        // VFR-ruter tegnes som egne linjer i appen (bare fra rene VFR-kart med presis georeferanse).
+        if (vfrOnly)
+          for (const r of res.routes) routes.push({ ad: ident, chart: c.title, ...r, note: res.routeNote ?? undefined });
       } catch (e) {
         log(`  ${ident} ${c.title}: symbollesing feilet (${e.message}) – bruker bare tabellen`);
         found = parseChartPoints(text).map((p) => ({ ...p, compulsory: null, src: 'table', accuracyM: null }));
@@ -142,6 +128,7 @@ export async function buildVfrPoints({ pages, graphicsBase, ifrNames, ap, get, c
             dup.cad = { ...(dup.cad ?? {}), [ident]: p.compulsory ? 1 : 0 };
           }
           // Tabellkoordinat slår posisjon lest fra kartet.
+          if (p.alt && !dup.alt) dup.alt = p.alt;
           if (dup.src === 'chart' && p.src === 'table') Object.assign(dup, { lat: +p.lat.toFixed(5), lon: +p.lon.toFixed(5), src: 'table', acc: undefined });
           continue;
         }
@@ -154,10 +141,12 @@ export async function buildVfrPoints({ pages, graphicsBase, ifrNames, ap, get, c
           ...(p.compulsory === null ? {} : { c: p.compulsory ? 1 : 0, cad: { [ident]: p.compulsory ? 1 : 0 } }),
           src: p.src,
           ...(p.src === 'chart' ? { acc: p.accuracyM } : {}),
+          ...(p.alt ? { alt: p.alt } : {}),
+          ...(/^HLDG\b/.test(p.n) ? { hold: 1 } : {}),
         });
       }
     }
   }
-  log(`VFR: ${points.length} rapporteringspunkter (${points.filter((p) => p.c === 1).length} obligatoriske, ${points.filter((p) => p.src === 'chart').length} lest fra kartsymbol) fra ${pdfs} kart (${Object.keys(charts).length} flyplasser med VFR-kart), ${overlays.length} VFR-kart lagt over kartet`);
-  return { points, charts, overlays };
+  log(`VFR: ${points.length} rapporteringspunkter (${points.filter((p) => p.c === 1).length} obligatoriske, ${points.filter((p) => p.src === 'chart').length} lest fra kartsymbol) fra ${pdfs} kart (${Object.keys(charts).length} flyplasser med VFR-kart), ${routes.length} VFR-ruter`);
+  return { points, charts, routes };
 }

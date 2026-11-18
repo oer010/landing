@@ -14,6 +14,10 @@ export interface VfrPoint {
   src?: 'table' | 'chart';
   /** Nøyaktighet (m) når posisjonen er lest fra kartet. */
   acc?: number;
+  /** Høyde ved punktet («STEINVIK MAX 2000»). */
+  alt?: { max?: number; min?: number };
+  /** Venteområde (HLDG). */
+  hold?: 1;
 }
 
 export interface VfrChartLink {
@@ -22,31 +26,32 @@ export interface VfrChartLink {
   url: string;
 }
 
-export interface VfrOverlay {
+export interface VfrRoute {
   ad: string;
-  title: string;
-  page: string;
-  img: string;
-  /** Hjørner [lat, lon]: øverst venstre, øverst høyre, nederst venstre. */
-  tl: [number, number];
-  tr: [number, number];
-  bl: [number, number];
+  chart: string;
+  /** Linjen som [lat, lon], fra det georefererte AIP-rutekartet. */
+  pts: [number, number][];
+  arrowStart: boolean;
+  arrowEnd: boolean;
+  /** Høyde lest langs linjen («MAX 1000»), om entydig. */
+  alt: { max?: number; min?: number } | null;
+  /** Felles høydemerknad på kartet. */
+  note?: string;
   accuracyM: number;
-  controlPoints: number;
 }
 
 export interface VfrData {
   edition: string;
   points: VfrPoint[];
   charts: Record<string, VfrChartLink[]>;
-  overlays: VfrOverlay[];
+  routes: VfrRoute[];
 }
 
 let p: Promise<VfrData | null> | null = null;
 export function loadVfr(): Promise<VfrData | null> {
   p ??= fetch('./data/vfr.json')
     .then((r) => (r.ok ? r.json() : null))
-    .then((d) => (d ? { overlays: [], charts: {}, points: [], ...d } : null))
+    .then((d) => (d ? { routes: [], charts: {}, points: [], ...d } : null))
     .catch(() => null);
   return p;
 }
