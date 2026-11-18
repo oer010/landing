@@ -1,0 +1,30 @@
+name: Hinderdata
+# Henter luftfartshindre (OpenStreetMap/NRL) ukentlig og legger dem på datagrenen
+# notam-data, som VFR-appen leser fra raw.githubusercontent.com.
+on:
+  schedule:
+    - cron: '23 3 * * 1'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: data-branch
+  cancel-in-progress: false
+jobs:
+  obstacles:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: flyapp/scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Hent hindre
+        run: node flyapp/scripts/obstacles-fetch.mjs "$RUNNER_TEMP/obstacles.json"
+      - name: Publiser til notam-data
+        run: bash flyapp/scripts/publish-data.sh "$RUNNER_TEMP/obstacles.json"
+        env:
+          TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
