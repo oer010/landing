@@ -9,6 +9,12 @@ export interface Waypoint extends LatLon {
   elevFt?: number | null;
   /** Flyhøyde (ft MSL) på legget som ender i dette punktet. Mangler = rutens standardhøyde. */
   legAltFt?: number | null;
+  /** Brukerpunkt som venter på automatisk stedsnavn. */
+  needsName?: boolean;
+  /** Navnet er hentet automatisk (Kartverket). */
+  autoName?: boolean;
+  /** Brukeren har gitt punktet eget navn – ikke overskriv. */
+  manualName?: boolean;
 }
 
 export interface Wind {

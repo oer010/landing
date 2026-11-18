@@ -9,8 +9,16 @@ const esc = (s: string) =>
   s.replace(/[<>&'"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', "'": '&apos;', '"': '&quot;' })[c] as string);
 
 /** Navn som tåles av GPS-er: A–Z/0–9, maks 6 tegn for brukerpunkter. */
+const translit = (s: string) =>
+  s
+    .toUpperCase()
+    .replace(/Æ/g, 'AE')
+    .replace(/Ø/g, 'O')
+    .replace(/Å/g, 'A')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 const gpsIdent = (w: Waypoint, i: number) =>
-  w.kind === 'user' ? (w.id.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) || `WP${i}`) : w.id.toUpperCase();
+  w.kind === 'user' ? (translit(w.id).replace(/[^A-Z0-9]/g, '').slice(0, 6) || `WP${i}`) : w.id.toUpperCase();
 
 export function routeToGpx(name: string, wps: Waypoint[]): string {
   const pts = wps

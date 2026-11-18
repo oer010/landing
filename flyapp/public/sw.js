@@ -1,6 +1,6 @@
 // Service worker: appen og flyplassdata virker offline, og kartfliser du har
 // sett, caches slik at de også er tilgjengelige uten dekning i lufta.
-const APP_CACHE = 'vfr-app-v9';
+const APP_CACHE = 'vfr-app-v10';
 const TILE_CACHE = 'vfr-tiles-v1';
 const MAX_TILES = 6000;
 

@@ -15,6 +15,14 @@ export interface Aircraft {
   colour: string;
   tas: number;
   fuelBurn: number;
+  /** Klatring: TAS (kt), stigehastighet (ft/min), forbruk (per time). Valgfrie i eldre profiler. */
+  climbTas?: number;
+  climbFpm?: number;
+  climbBurn?: number;
+  /** Nedstigning: TAS (kt), synkehastighet (ft/min), forbruk (per time). */
+  descentTas?: number;
+  descentFpm?: number;
+  descentBurn?: number;
   fuelUnit: 'L' | 'USG';
   usableFuel: number;
   /** Vekt per drivstoffenhet i vektenheten (kg/L ≈ 0,72 for avgas). */
@@ -131,6 +139,12 @@ export function exampleAircraft(): Aircraft {
     colour: 'WHITE BLUE',
     tas: 105,
     fuelBurn: 32,
+    climbTas: 75,
+    climbFpm: 650,
+    climbBurn: 40,
+    descentTas: 110,
+    descentFpm: 500,
+    descentBurn: 25,
     fuelUnit: 'L',
     usableFuel: 200,
     fuelDensity: 0.72,
@@ -190,4 +204,18 @@ export function defaultChecklists(): Checklist[] {
       'Trafikkrunde og innflyging planlagt',
     ]),
   ];
+}
+
+/** Ytelse for klatring/nedstigning, med fornuftige standardverdier for eldre profiler. */
+export function perfOf(ac: Aircraft) {
+  return {
+    climbTas: ac.climbTas ?? Math.round(ac.tas * 0.72),
+    climbFpm: ac.climbFpm ?? 600,
+    climbBurn: ac.climbBurn ?? Math.round(ac.fuelBurn * 1.25),
+    descentTas: ac.descentTas ?? Math.round(ac.tas * 1.05),
+    descentFpm: ac.descentFpm ?? 500,
+    descentBurn: ac.descentBurn ?? Math.round(ac.fuelBurn * 0.75),
+    cruiseTas: ac.tas,
+    cruiseBurn: ac.fuelBurn,
+  };
 }

@@ -161,7 +161,7 @@ export function navaidToWaypoint(n: Navaid): Waypoint {
 
 let userCounter = 1;
 export function userWaypoint(p: LatLon, name?: string): Waypoint {
-  return { id: name ?? `BRK${userCounter++}`, kind: 'user', lat: p.lat, lon: p.lon };
+  return { id: name ?? `BRK${userCounter++}`, kind: 'user', lat: p.lat, lon: p.lon, needsName: !name };
 }
 
 /** Tolker en rute skrevet som tekst: "ENKJ OSL 6030N00930E GRM ENBR". */
@@ -188,7 +188,7 @@ export function parseRouteString(db: AeroDb, text: string): { waypoints: Waypoin
     }
     const c = parseCoordinate(tok);
     if (c) {
-      waypoints.push({ id: tok.slice(0, 11), kind: 'user', ...c });
+      waypoints.push({ id: tok.slice(0, 11), kind: 'user', ...c, needsName: true });
       continue;
     }
     errors.push(tok);

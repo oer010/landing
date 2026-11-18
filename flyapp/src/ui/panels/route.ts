@@ -1,5 +1,6 @@
 import { fmtHdg } from '../../lib/geo';
 import { fetchForecastWind, windStatus } from '../autowind';
+import { renameWaypoint } from '../naming';
 import { airspaceStale, airspacesAlongRoute, fmtLimits, KIND_ADVICE, KIND_STYLE } from '../../lib/airspace';
 import type { Waypoint, Wind } from '../../lib/navlog';
 import { fmtVar } from '../../lib/mag';
@@ -7,7 +8,8 @@ import { computeNavlog, fmtMin, fuelPlan, legAltitudes, suggestVfrAltitude, vfrC
 import { categoryOf, CATEGORY_COLORS, fetchMetars, wxError } from '../../lib/metar';
 import { isNight, sunTimes } from '../../lib/sun';
 import { download, icaoFlightPlan, routeToFpl, routeToGpx } from '../../lib/export';
-import { uid } from '../../lib/store';
+import { perfOf, uid } from '../../lib/store';
+import { computeProfile, PATTERN_AGL, type Profile } from '../../lib/profile';
 import { isNative } from '../../lib/platform';
 import { badge, clear, fmt, h, numField, section, textField, toast } from '../dom';
 import { fitRoute, getAirspaceDb, isEditMode, setEditMode } from '../map';
@@ -29,7 +31,9 @@ export function renderRoute(el: HTMLElement): void {
     altitudeFt: r.altitudeFt,
     date: dep,
   });
-  const last = legs[legs.length - 1];
+  const prof = computeProfile(wps, legs, perfOf(ac));
+  // Totaler inkl. klatring/nedstigning.
+  const last = { cumDist: prof.totalDist, cumMin: prof.totalMin, cumFuel: prof.totalFuel };
 
   const routeInput = h('input', {
     type: 'text',
@@ -59,6 +63,17 @@ export function renderRoute(el: HTMLElement): void {
         h(
           'span',
           { class: 'btns' },
+          h(
+            'button',
+            {
+              title: 'Gi navn',
+              onclick: () => {
+                const n = prompt('Navn på punktet (tomt = finn stedsnavn automatisk):', w.manualName ? w.id : '');
+                if (n !== null) renameWaypoint(i, n);
+              },
+            },
+            '✎',
+          ),
           h('button', { title: 'Aktiver legg', onclick: () => setActiveIndex(i), disabled: i === 0 }, '▶'),
           h('button', { title: 'Flytt opp', onclick: () => move(i, -1), disabled: i === 0 }, '↑'),
           h('button', { title: 'Flytt ned', onclick: () => move(i, 1), disabled: i === wps.length - 1 }, '↓'),
@@ -148,7 +163,7 @@ export function renderRoute(el: HTMLElement): void {
   );
 
   if (legs.length) {
-    el.append(navlogTable(legs, ac.fuelUnit));
+    el.append(navlogTable(legs, prof, ac.fuelUnit));
     el.append(
       section(
         'Sammendrag',
@@ -178,7 +193,7 @@ export function renderRoute(el: HTMLElement): void {
     );
     const checks = h('ul', { class: 'checks' }, h('li', { class: 'muted' }, 'Sjekker…'));
     el.append(section('VFR-sjekk', checks));
-    void vfrChecks(checks, legs, dep, fp.extra);
+    void vfrChecks(checks, legs, dep, fp.extra, prof);
   }
 
   el.append(
@@ -195,8 +210,8 @@ export function renderRoute(el: HTMLElement): void {
         h('button', { onclick: saveRoute, disabled: wps.length < 2 }, '💾 Lagre'),
         h('button', { onclick: () => download(`${slug(r.name)}.gpx`, routeToGpx(r.name, wps), 'application/gpx+xml'), disabled: wps.length < 2 }, 'GPX'),
         h('button', { onclick: () => download(`${slug(r.name)}.fpl`, routeToFpl(r.name, wps), 'application/xml'), disabled: wps.length < 2 }, 'Garmin .fpl'),
-        h('button', { onclick: () => printNavlog(legs), disabled: !legs.length }, '🖨 Navlogg'),
-        h('button', { onclick: () => showFpl(el, legs, fp.enduranceMin), disabled: !legs.length }, 'ICAO-plan'),
+        h('button', { onclick: () => printNavlog(prof), disabled: !legs.length }, '🖨 Navlogg'),
+        h('button', { onclick: () => showFpl(el, prof.totalMin ?? 0, fp.enduranceMin), disabled: !legs.length }, 'ICAO-plan'),
       ),
       h(
         'div',
@@ -219,63 +234,74 @@ const stat = (k: string, v: string) => h('div', { class: 'stat' }, h('span', { c
 const row = (k: string, v: number, unit: string, strong = false) =>
   h('tr', { class: strong ? 'strong' : '' }, h('td', null, k), h('td', null, `${fmt.n(v, 1)} ${unit}`));
 
-function navlogTable(legs: NavlogLeg[], fuelUnit: string): HTMLElement {
+function navlogTable(legs: NavlogLeg[], prof: Profile, fuelUnit: string): HTMLElement {
   const ac = state.currentAircraft;
+  const pf = perfOf(ac);
   const fc = activeLegWinds();
   const ws = windStatus();
   const manual = state.route.windSpeed > 0;
   const windInfo = fc
-    ? h('p', { class: 'small' }, `TAS ${ac.tas} kt · vind fra prognose per legg (rettvisende retning/styrke i kt) · GS, tid og drivstoff er beregnet med vinden.`)
+    ? h('p', { class: 'small' }, `Vind fra prognose per legg (rettvisende retning/styrke i kt). GS, tid og drivstoff er beregnet med vinden.`)
     : ws.state === 'loading'
-      ? h('p', { class: 'small' }, `TAS ${ac.tas} kt · henter vind …`)
+      ? h('p', { class: 'small' }, 'Henter vind …')
       : manual
-        ? h('p', { class: 'small' }, `TAS ${ac.tas} kt · manuell vind ${String(state.route.windDir).padStart(3, '0')}°/${state.route.windSpeed} kt på alle legg.`)
-        : h('p', { class: 'warnbox' }, `Vind mangler – GS, tid og drivstoff under er uten vind (GS = TAS ${ac.tas} kt). Hent vind under «Vind i marsjhøyden».`);
+        ? h('p', { class: 'small' }, `Manuell vind ${String(state.route.windDir).padStart(3, '0')}°/${state.route.windSpeed} kt på alle legg.`)
+        : h('p', { class: 'warnbox' }, 'Vind mangler – GS, tid og drivstoff under er uten vind. Hent vind under «Vind i marsjhøyden».');
+  const kindIcon = { climb: '↗', cruise: '→', descent: '↘' } as const;
   return section(
     'Navigasjonslogg',
+    h(
+      'p',
+      { class: 'small' },
+      `Klatring ${pf.climbTas} kt / ${pf.climbFpm} ft/min · marsj TAS ${pf.cruiseTas} kt · nedstigning ${pf.descentTas} kt / ${pf.descentFpm} ft/min til ${PATTERN_AGL} ft over destinasjonen (fra flyprofilen).`,
+    ),
     windInfo,
+    prof.warnings.length ? h('p', { class: 'warnbox' }, prof.warnings.join(' · ')) : null,
     h(
       'div',
       { class: 'tablewrap' },
       h(
         'table',
         { class: 'navlog' },
-        h('thead', null, h('tr', null, ['Til', 'Høyde', 'Vind', 'Temp', 'TC', 'Var', 'MC', 'WCA', 'MH', 'Dist', 'GS', 'ETE', 'Fuel', 'Σ tid'].map((c) => h('th', null, c)))),
+        h('thead', null, h('tr', null, ['', 'Til', 'Høyde', 'Vind', 'Temp', 'TC', 'Var', 'MC', 'WCA', 'MH', 'Dist', 'GS', 'ETE', 'Fuel', 'Σ tid'].map((c) => h('th', null, c)))),
         h(
           'tbody',
           null,
-          legs.map((l, i) =>
-            h(
+          prof.rows.map((r) => {
+            const l = legs[r.legIndex];
+            const i = r.legIndex;
+            return h(
               'tr',
-              null,
-              h('td', { class: 'wp-id' }, l.to.id),
-              h('td', null, altCell(i, l)),
-              h('td', { title: windTitle(i), class: 'strong' }, fmtLegWind(i, l.wind)),
+              { class: `pr-${r.kind}` },
+              h('td', { class: 'pr-icon', title: r.kind === 'climb' ? 'Klatring' : r.kind === 'descent' ? 'Nedstigning' : 'Marsj' }, kindIcon[r.kind]),
+              h('td', { class: r.kind === 'cruise' && r.label === l.to.id ? 'wp-id' : 'pr-label' }, r.label),
+              h('td', null, r.kind === 'cruise' ? altCell(i, l) : h('span', { class: 'pr-alt' }, `${r.altFrom}→${r.altTo}`)),
+              h('td', { title: windTitle(i), class: 'strong' }, fmtLegWind(i, r.wind)),
               h('td', null, legTemp(i)),
-              h('td', null, fmtHdg(l.tc)),
+              h('td', null, fmtHdg(r.tc)),
               h('td', null, fmtVar(l.variation)),
-              h('td', { class: 'strong' }, fmtHdg(l.mc)),
-              h('td', null, l.wca === null ? '—' : `${l.wca > 0 ? '+' : ''}${l.wca.toFixed(0)}`),
-              h('td', { class: 'strong' }, l.mh === null ? '—' : fmtHdg(l.mh)),
-              h('td', null, l.dist.toFixed(1)),
-              h('td', null, fmt.n(l.gs, 0)),
-              h('td', null, fmtMin(l.eteMin)),
-              h('td', null, fmt.n(l.fuel, 1)),
-              h('td', null, fmtMin(l.cumMin)),
-            ),
-          ),
+              h('td', { class: 'strong' }, fmtHdg(r.mc)),
+              h('td', null, r.wca === null ? '—' : `${r.wca > 0 ? '+' : ''}${r.wca.toFixed(0)}`),
+              h('td', { class: 'strong' }, r.mh === null ? '—' : fmtHdg(r.mh)),
+              h('td', null, r.dist.toFixed(1)),
+              h('td', null, fmt.n(r.gs, 0)),
+              h('td', null, fmtMin(r.eteMin)),
+              h('td', null, fmt.n(r.fuel, 1)),
+              h('td', null, fmtMin(r.cumMin)),
+            );
+          }),
         ),
       ),
     ),
     h(
       'p',
       { class: 'muted small' },
-      `Vind (fra, rettvisende/kt) ${activeLegWinds() ? 'fra prognose per legg' : 'manuelt angitt'}. Vinkler i grader, distanse i NM, fart i kt, drivstoff i ${fuelUnit}. Misvisning fra WMM2025.`,
+      `↗ klatring, → marsj, ↘ nedstigning. TOC = toppen av klatringen, TOD = start på nedstigningen. Vind (fra, rettvisende/kt) ${activeLegWinds() ? 'fra prognose i leggets høyde' : 'manuelt angitt'}, brukt også under klatring/nedstigning. Distanse i NM, fart i kt, drivstoff i ${fuelUnit}.`,
     ),
   );
 }
 
-async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFuel: number): Promise<void> {
+async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFuel: number, prof: Profile): Promise<void> {
   const items: HTMLElement[] = [];
   const ok = (t: string) => items.push(h('li', { class: 'ok' }, '✓ ', t));
   const warn = (t: string) => items.push(h('li', { class: 'warn' }, '⚠ ', t));
@@ -328,7 +354,8 @@ async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFue
   else ok('Drivstoff dekker tur + reserve');
 
   // Dagslys
-  const lastLeg = legs[legs.length - 1];
+  const lastLeg = { cumMin: prof.totalMin };
+  for (const w of prof.warnings) warn(w);
   const dest = wps[wps.length - 1];
   if (lastLeg.cumMin !== null) {
     const eta = new Date(dep.getTime() + lastLeg.cumMin * 60000);
@@ -427,14 +454,14 @@ function savedRoutesList(): HTMLElement | null {
   );
 }
 
-function showFpl(el: HTMLElement, legs: NavlogLeg[], enduranceMin: number): void {
+function showFpl(el: HTMLElement, eetMin: number, enduranceMin: number): void {
   const r = state.route;
   const eobt = r.departureTime ? new Date(r.departureTime) : new Date(Date.now() + 3600000);
   const text = icaoFlightPlan({
     aircraft: state.currentAircraft,
     waypoints: r.waypoints,
     eobt,
-    eetMin: legs[legs.length - 1].cumMin ?? 0,
+    eetMin,
     enduranceMin,
     altitudeFt: r.altitudeFt,
     tas: state.currentAircraft.tas,
@@ -453,7 +480,7 @@ function showFpl(el: HTMLElement, legs: NavlogLeg[], enduranceMin: number): void
   box.scrollIntoView({ behavior: 'smooth' });
 }
 
-function printNavlog(legs: NavlogLeg[]): void {
+function printNavlog(prof: Profile): void {
   const r = state.route;
   const ac = state.currentAircraft;
   const host = document.getElementById('print')!;
@@ -468,18 +495,18 @@ function printNavlog(legs: NavlogLeg[]): void {
     h(
       'table',
       null,
-      h('thead', null, h('tr', null, ['Fra', 'Til', 'Høyde', 'Vind', 'MC', 'MH', 'Dist', 'GS', 'ETE', 'ETA', 'ATA', 'Fuel', 'Frekv./notat'].map((c) => h('th', null, c)))),
+      h('thead', null, h('tr', null, ['', 'Til', 'Høyde', 'Vind', 'MC', 'MH', 'Dist', 'GS', 'ETE', 'ETA', 'ATA', 'Fuel', 'Frekv./notat'].map((c) => h('th', null, c)))),
       h(
         'tbody',
         null,
-        legs.map((l, i) =>
+        prof.rows.map((l) =>
           h(
             'tr',
             null,
-            h('td', null, l.from.id),
-            h('td', null, l.to.id),
-            h('td', null, String(l.altFt)),
-            h('td', null, fmtLegWind(i, l.wind)),
+            h('td', null, l.kind === 'climb' ? '↗' : l.kind === 'descent' ? '↘' : ''),
+            h('td', null, l.label),
+            h('td', null, l.altFrom === l.altTo ? String(l.altTo) : `${l.altFrom}→${l.altTo}`),
+            h('td', null, fmtLegWind(l.legIndex, l.wind)),
             h('td', null, fmtHdg(l.mc)),
             h('td', null, l.mh === null ? '' : fmtHdg(l.mh)),
             h('td', null, l.dist.toFixed(1)),
@@ -493,7 +520,7 @@ function printNavlog(legs: NavlogLeg[]): void {
         ),
       ),
     ),
-    h('p', null, `Totalt ${legs[legs.length - 1].cumDist.toFixed(0)} NM · ${fmtMin(legs[legs.length - 1].cumMin)} · ${fmt.n(legs[legs.length - 1].cumFuel, 1)} ${ac.fuelUnit}`),
+    h('p', null, `Totalt ${prof.totalDist.toFixed(0)} NM · ${fmtMin(prof.totalMin)} (klatring ${fmtMin(prof.climbMin)}, nedstigning ${fmtMin(prof.descentMin)}) · ${fmt.n(prof.totalFuel, 1)} ${ac.fuelUnit}`),
   );
   if (isNative()) {
     // WKWebView kan ikke skrive ut direkte: del navloggen som HTML (kan skrives ut/lagres fra delingsarket).

@@ -4,6 +4,7 @@ import { setAirportLookup } from './lib/metar';
 import { clear, h, toast } from './ui/dom';
 import { initDatabar } from './ui/databar';
 import { initAutoWind } from './ui/autowind';
+import { initAutoNaming } from './ui/naming';
 import { fitRoute, initMap, map } from './ui/map';
 import { cancelDirectTo, gpsActive, simActive, startGps, startRecording, stopGps, stopRecording, stopSim } from './ui/position';
 import { state } from './ui/state';
@@ -172,6 +173,7 @@ async function main(): Promise<void> {
   }
   setAirportLookup((id) => state.db.byIdent.get(id));
   initAutoWind();
+  initAutoNaming();
   initMap(mapEl);
   document.getElementById('loading')?.remove();
 

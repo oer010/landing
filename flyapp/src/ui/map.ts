@@ -7,10 +7,13 @@ import { AIRPORT_TYPE_TEXT } from '../lib/data';
 import { declination, fmtVar, trueToMag } from '../lib/mag';
 import { sunTimes } from '../lib/sun';
 import { airspacesAt, fmtLimits, KIND_ADVICE, KIND_STYLE, KIND_TEXT, loadAirspace, type AirspaceDb, type AirspaceKind } from '../lib/airspace';
-import type { Waypoint } from '../lib/navlog';
+import { computeNavlog, type Waypoint } from '../lib/navlog';
+import { computeProfile } from '../lib/profile';
+import { perfOf } from '../lib/store';
 import { badge, clear, fmt, h, toast } from './dom';
-import { airportToWaypoint, navaidToWaypoint, state, userWaypoint } from './state';
+import { activeLegWinds, airportToWaypoint, navaidToWaypoint, state, userWaypoint } from './state';
 import { activeLeg, directTo } from './position';
+import { renameWaypoint } from './naming';
 
 export let map: L.Map;
 
@@ -511,6 +514,22 @@ function renderRoute(): void {
       insertRoutePointAt(e.latlng);
     });
   }
+  // TOC/TOD-merker langs ruten.
+  if (wps.length > 1) {
+    const r = state.route;
+    const ac = state.currentAircraft;
+    const legs = computeNavlog(wps, { tas: ac.tas, wind: { dir: r.windDir, speed: r.windSpeed }, legWinds: activeLegWinds(r), fuelBurn: ac.fuelBurn, altitudeFt: r.altitudeFt });
+    for (const row of computeProfile(wps, legs, perfOf(ac)).rows) {
+      const tag = row.kind === 'climb' ? 'TOC' : row.kind === 'cruise' && row.label === 'TOD' ? 'TOD' : row.kind === 'descent' && row.legIndex < legs.length - 1 ? '↘' : null;
+      if (!tag) continue;
+      L.marker([row.end.lat, row.end.lon], {
+        icon: L.divIcon({ className: 'vp-icon', html: `<span>${tag}</span>`, iconSize: [10, 10], iconAnchor: [5, 5] }),
+        interactive: false,
+        keyboard: false,
+      }).addTo(routeLayer);
+    }
+  }
+
   const leg = activeLeg();
   if (leg && !state.directTo) {
     L.polyline(
@@ -540,7 +559,10 @@ function renderRoute(): void {
     }).addTo(routeLayer);
     m.on('dragend', () => {
       const ll = m.getLatLng();
-      const snapped = nearestSnap(ll) ?? { ...w, kind: 'user', id: w.kind === 'user' ? w.id : `BRK${i}`, name: undefined, lat: ll.lat, lon: ll.lng };
+      // Flyttet fritt: nytt stedsnavn automatisk, med mindre brukeren har navngitt punktet.
+      const snapped =
+        nearestSnap(ll) ??
+        ({ ...w, kind: 'user', id: w.kind === 'user' ? w.id : `BRK${i}`, name: w.manualName ? w.name : undefined, lat: ll.lat, lon: ll.lng, needsName: !w.manualName } as Waypoint);
       const next = [...state.route.waypoints];
       next[i] = { ...snapped, legAltFt: w.legAltFt ?? null };
       state.setWaypoints(next);
@@ -552,6 +574,7 @@ function renderRoute(): void {
         h('div', { class: 'p-title' }, `${i + 1}. ${w.id}`),
         w.name ? h('div', { class: 'muted' }, w.name) : null,
         h('div', { class: 'muted small' }, formatLatLon(w)),
+        w.kind === 'user' ? renameBox(i, w) : null,
         h(
           'div',
           { class: 'popup-actions' },
@@ -776,6 +799,27 @@ function showAirspacesAt(p: LatLon): void {
 }
 
 export const getAirspaceDb = () => asDb;
+
+/** Felt for å gi et brukerpunkt eget navn, eller hente stedsnavn automatisk. */
+function renameBox(i: number, w: Waypoint): HTMLElement {
+  const input = h('input', { type: 'text', class: 'p-input', value: w.manualName ? w.id : '', placeholder: w.autoName ? `${w.id} (auto)` : 'Navn på punktet', maxlength: 20 });
+  const save = () => {
+    map.closePopup();
+    renameWaypoint(i, input.value);
+  };
+  input.addEventListener('keydown', (e) => e.key === 'Enter' && save());
+  return h(
+    'div',
+    { class: 'p-rename' },
+    input,
+    h(
+      'div',
+      { class: 'popup-actions' },
+      h('button', { class: 'p-primary', onclick: save }, 'Lagre navn'),
+      h('button', { onclick: () => (map.closePopup(), renameWaypoint(i, '')) }, 'Finn stedsnavn'),
+    ),
+  );
+}
 
 /**
  * Trykk på rutestreken. iPhone-Safari sender ikke alltid dblclick til siden, så vi

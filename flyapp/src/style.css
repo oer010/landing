@@ -346,3 +346,15 @@ ul.checks .as-dot { display: inline-block; width: 10px; height: 10px; border-rad
 table.navlog input.alt-input { width: 76px; min-height: 34px; padding: 3px 6px; font-variant-numeric: tabular-nums; text-align: right; }
 table.navlog input.alt-input.custom { border-color: #a78bfa; }
 table.navlog input.alt-input.wrong { border-color: var(--bad); color: #fecaca; background: rgb(239 68 68 / 0.15); }
+
+/* TOC/TOD på kartet */
+.vp-icon { width: 10px; height: 10px; border-radius: 50%; background: #fff; border: 2px solid #7c3aed; box-sizing: border-box; }
+.vp-icon span { position: absolute; left: 12px; top: -5px; font-size: 10px; font-weight: 800; color: #4c1d95; background: rgb(255 255 255 / 0.85); padding: 0 3px; border-radius: 3px; white-space: nowrap; }
+table.navlog tr.pr-climb td, table.navlog tr.pr-descent td { color: #c4b5fd; }
+table.navlog .pr-icon { font-weight: 800; color: #a78bfa; }
+table.navlog .pr-label { font-weight: 700; color: #c4b5fd; white-space: nowrap; }
+table.navlog .pr-alt { font-size: 12px; white-space: nowrap; }
+
+/* Navngi rutepunkt i boblen */
+.popup .p-rename { margin-top: 8px; }
+.popup input.p-input { width: 100%; background: #fff; color: #0f172a; border: 1px solid #94a3b8; border-radius: 8px; padding: 8px 10px; min-height: 40px; font-size: 16px; }

@@ -1,6 +1,6 @@
 import { distanceNm } from '../../lib/geo';
 import { computeWB, type WBResult } from '../../lib/wb';
-import { exampleAircraft, uid, type Aircraft } from '../../lib/store';
+import { exampleAircraft, perfOf, uid, type Aircraft } from '../../lib/store';
 import { fmt, h, numField, section, textField, toast } from '../dom';
 import { state } from '../state';
 
@@ -12,6 +12,7 @@ export function renderAircraft(el: HTMLElement): void {
     persist();
   };
   const wu = ac.weightUnit;
+  const pf = perfOf(ac);
   const au = ac.armUnit;
 
   // Drivstoff om bord i volum for M&B-stasjonen
@@ -92,6 +93,20 @@ export function renderAircraft(el: HTMLElement): void {
           ac.armUnit = a;
           persist();
         }),
+      ),
+    ),
+    section(
+      'Klatring og nedstigning',
+      h('p', { class: 'muted small' }, 'Brukes i navloggen til TOC/TOD, tid og drivstoff. Hent tallene fra POH (gjennomsnitt for typisk høyde).'),
+      h(
+        'div',
+        { class: 'grid2' },
+        numField('Klatring TAS', pf.climbTas, (v) => set('climbTas')(v), { unit: 'kt' }),
+        numField('Stigehastighet', pf.climbFpm, (v) => set('climbFpm')(v), { unit: 'ft/min', step: 50 }),
+        numField('Forbruk klatring', pf.climbBurn, (v) => set('climbBurn')(v), { unit: `${ac.fuelUnit}/t` }),
+        numField('Nedstigning TAS', pf.descentTas, (v) => set('descentTas')(v), { unit: 'kt' }),
+        numField('Synkehastighet', pf.descentFpm, (v) => set('descentFpm')(v), { unit: 'ft/min', step: 50 }),
+        numField('Forbruk nedstigning', pf.descentBurn, (v) => set('descentBurn')(v), { unit: `${ac.fuelUnit}/t` }),
       ),
     ),
     section(
