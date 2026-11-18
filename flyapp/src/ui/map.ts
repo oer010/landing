@@ -15,6 +15,7 @@ import { badge, clear, fmt, h, toast } from './dom';
 import { activeLegWinds, airportToWaypoint, navaidToWaypoint, state, userWaypoint } from './state';
 import { activeLeg, directTo } from './position';
 import { renameWaypoint } from './naming';
+import { initNotamLayer, renderNotams } from './notamlayer';
 
 export let map: L.Map;
 
@@ -87,7 +88,9 @@ export function initMap(el: HTMLElement): L.Map {
   });
   new (NmScale as unknown as new (o: L.Control.ScaleOptions) => L.Control)({ position: 'bottomleft', imperial: false, maxWidth: 160 }).addTo(map);
 
-  for (const l of [airspaceLayer, vfrRouteLayer, airportLayer, navaidLayer, vfrPointLayer, metarLayer, routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
+  for (const l of [airspaceLayer, vfrRouteLayer, airportLayer, navaidLayer, vfrPointLayer, metarLayer]) l.addTo(map);
+  initNotamLayer(map, POPUP_OPTS);
+  for (const l of [routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
   loadVfr().then((d) => {
     vfr = d;
     renderVfrRoutes();
@@ -789,6 +792,7 @@ function renderAirspace(): void {
   }
   updateAirspaceLabels();
   // Tegn flyplasser, rute og vær over luftrommet igjen (felles tegneflate tegner i rekkefølge).
+  renderNotams();
   renderAerodata();
   renderRoute();
   scheduleMetars();

@@ -6,6 +6,7 @@ import { initDatabar } from './ui/databar';
 import { initAutoWind } from './ui/autowind';
 import { initAutoNaming } from './ui/naming';
 import { fitRoute, initMap, map } from './ui/map';
+import { notamData, relevantNotams } from './ui/notamlayer';
 import { cancelDirectTo, gpsActive, simActive, startGps, startRecording, stopGps, stopRecording, stopSim } from './ui/position';
 import { state } from './ui/state';
 import { initNativeChrome, isNative, setKeepAwake } from './lib/platform';
@@ -113,10 +114,11 @@ function mapButtons(): HTMLElement {
   // Kartlag av/på.
   const layersBtn = h('button', { class: 'fab', title: 'Kartlag' }, 'Lag');
   const sheet = h('div', { class: 'layer-sheet', hidden: true });
-  type Key = 'showAirports' | 'showNavaids' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showMetars';
+  type Key = 'showAirports' | 'showNavaids' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams' | 'showMetars';
   const items: [Key, string][] = [
     ['showVfrPoints', 'VFR-rapporteringspunkter'],
     ['showVfrCharts', 'VFR-ruter (AIP)'],
+    ['showNotams', 'NOTAM'],
     ['showAirspace', 'Luftrom'],
     ['showAirports', 'Flyplasser'],
     ['showNavaids', 'VOR/NDB'],
@@ -135,6 +137,7 @@ function mapButtons(): HTMLElement {
         ),
       ),
       h('div', { class: 'ls-legend' }, '▲ obligatorisk rapporteringspunkt · △ på forespørsel'),
+      h('div', { class: 'ls-legend' }, notamStatusText()),
       h(
         'div',
         { class: 'ls-base' },
@@ -149,7 +152,16 @@ function mapButtons(): HTMLElement {
     if (!sheet.hidden) drawSheet();
   };
   state.on('settings', () => !sheet.hidden && drawSheet());
+  state.on('notam', () => !sheet.hidden && drawSheet());
   return h('div', { class: 'fabs' }, gpsBtn, followBtn, recBtn, layersBtn, dtoBtn, simBtn, sheet);
+}
+
+function notamStatusText(): string {
+  const d = notamData();
+  if (!d) return 'NOTAM: ikke hentet ennå';
+  const ageMin = Math.round((Date.now() - new Date(d.generated).getTime()) / 60e3);
+  const age = ageMin < 90 ? `${ageMin} min` : `${Math.round(ageMin / 60)} t`;
+  return `NOTAM: ${relevantNotams().length} aktive/kommende under FL125 · oppdatert for ${age} siden · rød = restriksjon, oransje = hinder, lilla N = flyplass`;
 }
 
 function disclaimer(): void {

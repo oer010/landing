@@ -5,7 +5,7 @@ import { state } from '../state';
 
 export function renderSettings(el: HTMLElement): void {
   const s = state.settings;
-  const check = (label: string, key: 'showAirports' | 'showNavaids' | 'showMetars' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts') =>
+  const check = (label: string, key: 'showAirports' | 'showNavaids' | 'showMetars' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams') =>
     h(
       'label',
       { class: 'check' },
@@ -32,6 +32,7 @@ export function renderSettings(el: HTMLElement): void {
       check('Luftrom (Norge, fra AIP)', 'showAirspace'),
       check('VFR-rapporteringspunkter (AIP)', 'showVfrPoints'),
       check('VFR-ruter (AIP)', 'showVfrCharts'),
+      check('NOTAM', 'showNotams'),
       numField('Fartsvektor', s.vectorMin, (v) => state.updateSettings({ vectorMin: v }), { unit: 'min', min: 1, max: 30 }),
     ),
     section(

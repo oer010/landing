@@ -388,3 +388,14 @@ button.danger { background: #7f1d1d; border-color: #b91c1c; color: #fff; }
 .layer-sheet .ls-legend { font-size: 12px; color: #475569; margin-top: 6px; line-height: 1.5; }
 
 .vfr-arrow { pointer-events: none; }
+
+/* NOTAM */
+.notam-ad span { display: inline-block; padding: 1px 5px; border-radius: 9px; background: #7c3aed; color: #fff; font: 700 11px/16px system-ui, sans-serif; border: 1.5px solid #fff; box-shadow: 0 1px 3px rgb(0 0 0 / 0.4); white-space: nowrap; }
+.notam-ad span.upc { background: #a78bfa; }
+.notam-pt svg { filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.5)); }
+.notam-item { padding: 6px 0; border-bottom: 1px solid rgb(0 0 0 / 0.12); }
+.notam-item:last-of-type { border-bottom: 0; }
+.notam-text { white-space: pre-wrap; font: 12px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; margin-top: 4px; }
+.notam-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; }
+.notam-on { color: #b91c1c; }
+.notam-upc { color: #b45309; }

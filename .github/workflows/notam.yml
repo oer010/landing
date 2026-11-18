@@ -1,0 +1,36 @@
+name: NOTAM
+# Henter NOTAM for Norge hver halvtime og legger dem på grenen notam-data,
+# som VFR-appen leser fra raw.githubusercontent.com.
+on:
+  schedule:
+    - cron: '7,37 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: notam
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: flyapp
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Hent NOTAM
+        run: node flyapp/scripts/notam-fetch.mjs "$RUNNER_TEMP/notam.json"
+      - name: Publiser til notam-data
+        run: |
+          cd "$RUNNER_TEMP"
+          rm -rf pub && mkdir pub && cd pub
+          git init -q -b notam-data
+          cp ../notam.json .
+          git config user.name "github-actions[bot]"
+          git config user.email "41898315+github-actions[bot]@users.noreply.github.com"
+          git add notam.json
+          git commit -qm "NOTAM $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -qf "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" notam-data

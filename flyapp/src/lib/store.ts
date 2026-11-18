@@ -100,6 +100,7 @@ export interface Settings {
   showAirspace: boolean;
   showVfrPoints: boolean;
   showVfrCharts: boolean;
+  showNotams: boolean;
   vectorMin: number;
   disclaimerAccepted: boolean;
 }
@@ -112,6 +113,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showAirspace: true,
   showVfrPoints: true,
   showVfrCharts: true,
+  showNotams: true,
   vectorMin: 5,
   disclaimerAccepted: false,
 };
