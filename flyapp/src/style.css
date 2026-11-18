@@ -358,3 +358,20 @@ table.navlog .pr-alt { font-size: 12px; white-space: nowrap; }
 /* Navngi rutepunkt i boblen */
 .popup .p-rename { margin-top: 8px; }
 .popup input.p-input { width: 100%; background: #fff; color: #0f172a; border: 1px solid #94a3b8; border-radius: 8px; padding: 8px 10px; min-height: 40px; font-size: 16px; }
+
+/* VFR-rapporteringspunkter og kartlenker */
+.leaflet-marker-icon.vrp-icon { display: grid; place-items: center; }
+.vrp-icon span { position: absolute; left: 24px; top: 8px; font-size: 10.5px; font-weight: 800; color: #1e3a8a; background: rgb(255 255 255 / 0.8); padding: 0 3px; border-radius: 3px; white-space: nowrap; pointer-events: none; }
+.popup .p-charts { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+.popup a.p-chartlink { color: #1d4ed8 !important; font-weight: 600; font-size: 14px; text-decoration: none; padding: 4px 0; }
+.vfr-chart-img { image-rendering: auto; }
+
+/* Kartlag-meny */
+.layer-sheet { position: absolute; left: 62px; top: 0; width: 230px; background: #ffffff; color: #0f172a; border-radius: 12px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.45); padding: 10px 12px; z-index: 950; }
+.layer-sheet[hidden] { display: none; }
+.layer-sheet .ls-title { font-weight: 800; font-size: 16px; margin-bottom: 4px; }
+.layer-sheet .ls-row { display: flex; align-items: center; gap: 8px; padding: 7px 0; font-size: 15px; border-bottom: 1px solid #e2e8f0; color: #0f172a; }
+.layer-sheet .ls-row input { width: 22px; height: 22px; min-height: 0; accent-color: #1d4ed8; }
+.layer-sheet .ls-base { display: flex; gap: 6px; margin-top: 8px; }
+.layer-sheet .ls-base button { flex: 1; background: #e2e8f0; color: #0f172a; border: 1px solid #94a3b8; font-size: 13px; min-height: 36px; padding: 4px; }
+.layer-sheet .ls-base button.on { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }

@@ -110,7 +110,45 @@ function mapButtons(): HTMLElement {
   };
   state.on('nav', update);
   update();
-  return h('div', { class: 'fabs' }, gpsBtn, followBtn, recBtn, dtoBtn, simBtn);
+  // Kartlag av/på.
+  const layersBtn = h('button', { class: 'fab', title: 'Kartlag' }, 'Lag');
+  const sheet = h('div', { class: 'layer-sheet', hidden: true });
+  type Key = 'showAirports' | 'showNavaids' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showMetars';
+  const items: [Key, string][] = [
+    ['showVfrPoints', 'VFR-rapporteringspunkter'],
+    ['showVfrCharts', 'VFR-rutekart (AIP)'],
+    ['showAirspace', 'Luftrom'],
+    ['showAirports', 'Flyplasser'],
+    ['showNavaids', 'VOR/NDB'],
+    ['showMetars', 'METAR-farger'],
+  ];
+  const drawSheet = () =>
+    clear(
+      sheet,
+      h('div', { class: 'ls-title' }, 'Kartlag'),
+      items.map(([k, label]) =>
+        h(
+          'label',
+          { class: 'ls-row' },
+          h('input', { type: 'checkbox', checked: state.settings[k], onchange: (e: Event) => state.updateSettings({ [k]: (e.target as HTMLInputElement).checked }) }),
+          ` ${label}`,
+        ),
+      ),
+      h(
+        'div',
+        { class: 'ls-base' },
+        (['topo', 'osm'] as const).map((b) =>
+          h('button', { class: state.settings.baseLayer === b ? 'on' : '', onclick: () => state.updateSettings({ baseLayer: b }) }, b === 'topo' ? 'Topografisk' : 'Veikart'),
+        ),
+      ),
+    );
+  layersBtn.onclick = () => {
+    sheet.hidden = !sheet.hidden;
+    layersBtn.classList.toggle('on', !sheet.hidden);
+    if (!sheet.hidden) drawSheet();
+  };
+  state.on('settings', () => !sheet.hidden && drawSheet());
+  return h('div', { class: 'fabs' }, gpsBtn, followBtn, recBtn, layersBtn, dtoBtn, simBtn, sheet);
 }
 
 function disclaimer(): void {

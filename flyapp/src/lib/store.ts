@@ -88,6 +88,8 @@ export interface Settings {
   showNavaids: boolean;
   showMetars: boolean;
   showAirspace: boolean;
+  showVfrPoints: boolean;
+  showVfrCharts: boolean;
   vectorMin: number;
   disclaimerAccepted: boolean;
 }
@@ -98,6 +100,8 @@ export const DEFAULT_SETTINGS: Settings = {
   showNavaids: true,
   showMetars: true,
   showAirspace: true,
+  showVfrPoints: true,
+  showVfrCharts: true,
   vectorMin: 5,
   disclaimerAccepted: false,
 };

@@ -10,7 +10,7 @@ Samme kode kjører også i nettleser (PWA) på iPad, Android og PC.
 
 | Område | Innhold |
 | --- | --- |
-| **Kart** | Topografisk/OSM-bakgrunn, flyplasser (blå = TWR, magenta = ukontrollert), VOR/NDB, METAR-farger (VFR/MVFR/IFR/LIFR), norsk luftrom med høydegrenser, rullebaner ved høy zoom, NM-skala |
+| **Kart** | Lag-knapp for å slå lag av/på; VFR-rapporteringspunkter og offisielle VFR-rutekart fra AIP; topografisk/OSM-bakgrunn, flyplasser (blå = TWR, magenta = ukontrollert), VOR/NDB, METAR-farger (VFR/MVFR/IFR/LIFR), norsk luftrom med høydegrenser, rullebaner ved høy zoom, NM-skala |
 | **Moving map** | GPS-posisjon, flysymbol, fartsvektor, sporlinje, «følg fly», datastripe (GS, TRK, ALT, neste, DIS, BRG, ETE, ETA, XTK, gjenstående) |
 | **Rute** | Fra/Til med søk, dobbelttrykk/trykk på rutestreken for nye punkter som kan dras, automatisk stedsnavn (Kartverket) eller eget navn; skriv rute som tekst (`ENKJ GRM 6030N00930E ENBR`), rediger på kartet, gummistrikk-innsetting, dra og snap til flyplass/navaid, snu, lagre ruter, Direkte-til |
 | **Navlogg** | Klatring (TOC), marsj og nedstigning (TOD) med egen fart/stige-/synkehastighet/forbruk; høyde per legg; prognosevind per legg i leggets høyde; TC, misvisning (WMM2025), MC, WCA, MH, distanse, GS, ETE, drivstoff; utskrift |
@@ -101,6 +101,7 @@ AIRAC-datoen vises i appen, med advarsel når dataene er eldre enn én syklus (2
 - Kart: © OpenStreetMap-bidragsytere, OpenTopoMap (CC-BY-SA)
 - Vær: [aviationweather.gov Data API](https://aviationweather.gov/data/api/)
 - Luftrom: AIP Norge, konvertert av [luftrom.info / relet/pg-xc](https://github.com/relet/pg-xc) (uten ansvar – sjekk gjeldende AIP og NOTAM). Hentes av `npm run data`.
+- VFR-rapporteringspunkter: koordinattabellene på VFR-/innflygingskartene i AIP Norge (AD 2 XXXX 6-x). VFR-rutekart (Bergen, Kjeller, Rygge, Værnes) georefereres automatisk mot punktene (±12–45 m) og legges over kartet. Krever `pdftotext`/`pdftocairo` (poppler-utils) ved `npm run data`.
 - Stedsnavn for rutepunkter: [Kartverket stedsnavn-API](https://ws.geonorge.no/stedsnavn/v1/)
 - Vind i høyden: [Open-Meteo](https://open-meteo.com/). METAR/TAF uten proxy: [MET Norge](https://api.met.no/)
 - Misvisning: NOAA World Magnetic Model 2025 (via `geomagnetism`)

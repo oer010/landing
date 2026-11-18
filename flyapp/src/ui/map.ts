@@ -4,6 +4,8 @@ import type { Airport, Navaid } from '../lib/data';
 import { bearingTrue, destination, distanceNm, fmtHdg, formatLatLon, type LatLon } from '../lib/geo';
 import { CATEGORY_COLORS, categoryOf, fetchMetars, fetchMetarsInBox, metarAgeMin, type Metar } from '../lib/metar';
 import { AIRPORT_TYPE_TEXT } from '../lib/data';
+import { loadVfr, type VfrData, type VfrPoint } from '../lib/vfrdata';
+import { AffineImageOverlay } from './imageoverlay';
 import { declination, fmtVar, trueToMag } from '../lib/mag';
 import { sunTimes } from '../lib/sun';
 import { airspacesAt, fmtLimits, KIND_ADVICE, KIND_STYLE, KIND_TEXT, loadAirspace, type AirspaceDb, type AirspaceKind } from '../lib/airspace';
@@ -42,6 +44,9 @@ const BASE_LAYERS = {
 
 let baseLayer: L.TileLayer | null = null;
 const airspaceLayer = L.layerGroup();
+const vfrPointLayer = L.layerGroup();
+const vfrChartLayer = L.layerGroup();
+let vfr: VfrData | null = null;
 let asDb: AirspaceDb | null = null;
 const airportLayer = L.layerGroup();
 const navaidLayer = L.layerGroup();
@@ -83,7 +88,17 @@ export function initMap(el: HTMLElement): L.Map {
   });
   new (NmScale as unknown as new (o: L.Control.ScaleOptions) => L.Control)({ position: 'bottomleft', imperial: false, maxWidth: 160 }).addTo(map);
 
-  for (const l of [airspaceLayer, airportLayer, navaidLayer, metarLayer, routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
+  // Egen rute for VFR-kartbilder: under luftrom/rute, og «multiply» så hvit bakgrunn blir gjennomsiktig.
+  const chartPane = map.createPane('vfrcharts');
+  chartPane.style.zIndex = '250';
+  chartPane.style.mixBlendMode = 'multiply';
+  for (const l of [vfrChartLayer, airspaceLayer, airportLayer, navaidLayer, vfrPointLayer, metarLayer, routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
+  loadVfr().then((d) => {
+    vfr = d;
+    renderVfrCharts();
+    renderAerodata();
+    state.emit('airspace');
+  });
   // METAR-sirkler under flyplassene.
   metarLayer.setZIndex?.(1);
 
@@ -124,6 +139,7 @@ export function initMap(el: HTMLElement): L.Map {
     else if (!openNearestAt(e.containerPoint)) showAirspacesAt(p);
   });
   map.on('zoomend', updateAirspaceLabels);
+  map.on('zoomend', () => (chartPane.style.display = map.getZoom() >= 8 ? '' : 'none'));
   loadAirspace().then((db) => {
     asDb = db;
     state.emit('airspace');
@@ -180,6 +196,7 @@ export const isEditMode = () => editMode;
 
 function applySettings(): void {
   const s = state.settings;
+  renderVfrCharts();
   if (baseLayer) baseLayer.remove();
   baseLayer = BASE_LAYERS[s.baseLayer]().addTo(map);
   baseLayer.bringToBack();
@@ -316,6 +333,7 @@ export function airportPopup(a: Airport): HTMLElement {
       ),
     ),
     wx,
+    vfrChartLinks(a.ident),
     h(
       'div',
       { class: 'popup-actions' },
@@ -398,6 +416,23 @@ export function renderAerodata(): void {
               ],
               { color: '#111827', weight: z >= 13 ? 8 : 5, opacity: 0.8, interactive: false },
             ).addTo(airportLayer);
+    }
+  }
+  vfrPointLayer.clearLayers();
+  if (vfr && s.showVfrPoints && z >= 8) {
+    for (const p of vfr.points) {
+      if (!b.contains([p.lat, p.lon])) continue;
+      L.marker([p.lat, p.lon], {
+        icon: L.divIcon({
+          className: 'vrp-icon',
+          html: `<svg viewBox="0 0 20 18" width="18" height="16"><polygon points="10,1 19,17 1,17" fill="rgb(255 255 255 / 0.7)" stroke="#1d4ed8" stroke-width="2.2" stroke-linejoin="round"/></svg>${z >= 9 ? `<span>${p.n}</span>` : ''}`,
+          iconSize: [30, 30],
+          iconAnchor: [15, 17],
+        }),
+        keyboard: false,
+      })
+        .bindPopup(() => vfrPointPopup(p), POPUP_OPTS)
+        .addTo(vfrPointLayer);
     }
   }
   if (s.showNavaids && z >= 7) {
@@ -799,6 +834,49 @@ function showAirspacesAt(p: LatLon): void {
 }
 
 export const getAirspaceDb = () => asDb;
+export const getVfr = () => vfr;
+
+/** Lenker til offisielle VFR-/innflygingskart (PDF i AIP) for en flyplass. */
+export function vfrChartLinks(ident: string): HTMLElement | null {
+  const list = vfr?.charts[ident];
+  if (!list?.length) return null;
+  const n = vfr!.points.filter((p) => p.ad.includes(ident)).length;
+  return h(
+    'div',
+    { class: 'p-charts' },
+    h('div', { class: 'p-muted' }, `VFR: ${n} rapporteringspunkter${vfr!.overlays.some((o) => o.ad === ident) ? ' · rutekart på kartet' : ''}`),
+    list.map((c) => h('a', { href: c.url, target: '_blank', rel: 'noopener', class: 'p-chartlink' }, `📄 ${c.title}`)),
+  );
+}
+
+function renderVfrCharts(): void {
+  vfrChartLayer.clearLayers();
+  if (!vfr || !state.settings.showVfrCharts) return;
+  for (const o of vfr.overlays)
+    new AffineImageOverlay(`./data/${o.img}`, o.tl, o.tr, o.bl, { pane: 'vfrcharts', opacity: 0.95, className: 'vfr-chart-img' }).addTo(vfrChartLayer);
+}
+
+function vfrPointPopup(p: VfrPoint): HTMLElement {
+  const w: Waypoint = { id: p.n, name: `VFR-punkt ${p.ad.join('/')}`, kind: 'user', lat: p.lat, lon: p.lon, manualName: true };
+  const me = fromMe(p);
+  return h(
+    'div',
+    { class: 'popup' },
+    h('div', { class: 'p-title' }, p.n),
+    h('div', { class: 'p-muted' }, `VFR-rapporteringspunkt · ${p.ad.map((a) => `${a} ${state.db.byIdent.get(a)?.name ?? ''}`.trim()).join(', ')}`),
+    h(
+      'table',
+      { class: 'p-table' },
+      h('tbody', null, row('Posisjon', formatLatLon(p)), me ? row('Fra deg', me) : null, row('Kilde', `AIP Norge ${vfr?.edition ?? ''} (VFR-/innflygingskart)`)),
+    ),
+    h(
+      'div',
+      { class: 'popup-actions' },
+      h('button', { class: 'p-primary', onclick: () => (map.closePopup(), directTo(w)) }, 'Direkte →'),
+      h('button', { onclick: () => (map.closePopup(), addRoutePoint(w)) }, '+ Rute'),
+    ),
+  );
+}
 
 /** Felt for å gi et brukerpunkt eget navn, eller hente stedsnavn automatisk. */
 function renameBox(i: number, w: Waypoint): HTMLElement {
@@ -935,6 +1013,7 @@ function openNearestAt(pt: L.Point): boolean {
     if (d <= TAP_RADIUS_PX && (!best || d < best.d)) best = { d, ll: [lat, lon], content };
   };
   if (state.settings.showNavaids && z >= 7) for (const n of state.db.navaids) consider(n.lat, n.lon, () => navaidPopup(n));
+  if (vfr && state.settings.showVfrPoints && z >= 8) for (const p of vfr.points) consider(p.lat, p.lon, () => vfrPointPopup(p));
   if (state.settings.showAirports) for (const a of state.db.airports) if (airportVisible(a, z)) consider(a.lat, a.lon, () => airportPopup(a));
   const hit = best as { d: number; ll: [number, number]; content: () => HTMLElement } | null;
   if (!hit) return false;

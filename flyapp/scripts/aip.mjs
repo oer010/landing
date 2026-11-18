@@ -66,17 +66,22 @@ export function parseAd218(html, ident) {
   return rows;
 }
 
-async function get(url) {
+async function getRes(url) {
   for (let attempt = 1; ; attempt++) {
     try {
       const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return { url: res.url, text: await res.text() };
+      return res;
     } catch (e) {
       if (attempt >= 3) throw new Error(`${url}: ${e.message}`);
       await new Promise((r) => setTimeout(r, 1500 * attempt));
     }
   }
+}
+
+async function get(url) {
+  const res = await getRes(url);
+  return { url: res.url, text: await res.text() };
 }
 
 /** Gjeldende utgave og liste over flyplasser. */
@@ -89,12 +94,23 @@ async function currentEdition() {
   const root = `${base}${edition}-AIRAC/html/eAIP/`;
   const menu = await get(`${root}EN-menu-en-GB.html`);
   const idents = [...new Set([...menu.text.matchAll(/EN-AD-2\.([A-Z]{4})-en-GB/g)].map((x) => x[1]))].sort();
-  return { edition, root, idents };
+  return { edition, base, root, idents };
 }
 
-export async function fetchAipFrequencies({ concurrency = 6, log = console.log } = {}) {
-  const { edition, root, idents } = await currentEdition();
+/** 5-bokstavs IFR-punkter (ENR 4.4), for å skille dem fra VFR-punkter. */
+async function ifrPointNames(root) {
+  const t = (await get(`${root}EN-ENR-4.4-en-GB.html`)).text.replace(/<span class="sdParams"[^>]*>[\s\S]*?<\/span>/g, '');
+  return new Set([...t.replace(/<[^>]+>/g, ' ').matchAll(/\b([A-Z]{5})\b\s+\d{6}/g)].map((m) => m[1]));
+}
+
+/**
+ * Henter alt fra AIP Norge i én runde: frekvenser (AD 2.18) og VFR-rapporteringspunkter
+ * fra VFR-/innflygingskartene. `ap` = Map ident → {lat, lon} for fornuftssjekk.
+ */
+export async function fetchAipData({ ap = new Map(), chartDir = null, concurrency = 6, log = console.log } = {}) {
+  const { edition, base, root, idents } = await currentEdition();
   const airports = {};
+  const pages = new Map();
   const queue = [...idents];
   const failed = [];
   await Promise.all(
@@ -102,6 +118,7 @@ export async function fetchAipFrequencies({ concurrency = 6, log = console.log }
       for (let id; (id = queue.shift()); ) {
         try {
           const page = await get(`${root}EN-AD-2.${id}-en-GB.html`);
+          pages.set(id, page.text);
           const rows = parseAd218(page.text, id);
           if (rows.length) airports[id] = rows;
         } catch (e) {
@@ -111,5 +128,13 @@ export async function fetchAipFrequencies({ concurrency = 6, log = console.log }
     }),
   );
   log(`AIP Norge ${edition}: frekvenser for ${Object.keys(airports).length}/${idents.length} flyplasser${failed.length ? ` (feilet: ${failed.join(', ')})` : ''}`);
-  return { edition, source: 'AIP Norge (Avinor eAIP), AD 2.18', airports };
+  let vfr = null;
+  try {
+    const { buildVfrPoints } = await import('./vfr.mjs');
+    const ifrNames = await ifrPointNames(root);
+    vfr = await buildVfrPoints({ pages: [...pages].sort(), graphicsBase: `${base}${edition}-AIRAC/`, ifrNames, ap, get: getRes, chartDir, log });
+  } catch (e) {
+    log(`Advarsel: VFR-punkter feilet: ${e.message}`);
+  }
+  return { edition, source: 'AIP Norge (Avinor eAIP), AD 2.18', airports, vfr };
 }
