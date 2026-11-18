@@ -181,7 +181,22 @@ async function main(): Promise<void> {
 
   void initNativeChrome();
   if ('serviceWorker' in navigator && import.meta.env.PROD && !isNative()) {
-    navigator.serviceWorker.register('./sw.js').catch((err) => console.warn('SW', err));
+    // Nye versjoner: sjekk ved oppstart og hver gang appen åpnes igjen, og last inn på nytt
+    // når en ny versjon har tatt over (ikke ved aller første installasjon).
+    const hadController = !!navigator.serviceWorker.controller;
+    let reloading = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!hadController || reloading) return;
+      reloading = true;
+      toast('Ny versjon lastet – oppdaterer …');
+      setTimeout(() => location.reload(), 600);
+    });
+    navigator.serviceWorker
+      .register('./sw.js', { updateViaCache: 'none' })
+      .then((reg) => {
+        document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && reg.update().catch(() => undefined));
+      })
+      .catch((err) => console.warn('SW', err));
   }
   // Hold skjermen våken mens GPS eller simulering er aktiv.
   let awake = false;

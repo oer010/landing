@@ -1,6 +1,6 @@
 // Service worker: appen og flyplassdata virker offline, og kartfliser du har
 // sett, caches slik at de også er tilgjengelige uten dekning i lufta.
-const APP_CACHE = 'vfr-app-v5';
+const APP_CACHE = 'vfr-app-v6';
 const TILE_CACHE = 'vfr-tiles-v1';
 const MAX_TILES = 6000;
 
@@ -54,9 +54,10 @@ self.addEventListener('fetch', (e) => {
   }
 
   if (url.origin === self.location.origin) {
-    // Nett først for app-filer, fall tilbake til cache offline.
+    // Nett først for app-filer, og alltid spør serveren om nyere versjon
+    // (no-cache = revalider, så nettleserens 10-min-cache ikke gir gammel app).
     e.respondWith(
-      fetch(e.request)
+      fetch(url.href, { cache: 'no-cache', credentials: 'same-origin' })
         .then((res) => {
           if (res.ok) {
             const copy = res.clone();
