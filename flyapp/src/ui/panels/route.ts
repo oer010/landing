@@ -207,7 +207,7 @@ export function renderRoute(el: HTMLElement): void {
       h(
         'div',
         { class: 'row wrap' },
-        h('button', { onclick: saveRoute, disabled: wps.length < 2 }, '💾 Lagre'),
+        h('button', { onclick: () => saveRoute(), disabled: wps.length < 2 }, '💾 Lagre'),
         h('button', { onclick: () => download(`${slug(r.name)}.gpx`, routeToGpx(r.name, wps), 'application/gpx+xml'), disabled: wps.length < 2 }, 'GPX'),
         h('button', { onclick: () => download(`${slug(r.name)}.fpl`, routeToFpl(r.name, wps), 'application/xml'), disabled: wps.length < 2 }, 'Garmin .fpl'),
         h('button', { onclick: () => printNavlog(prof), disabled: !legs.length }, '🖨 Navlogg'),
@@ -391,7 +391,22 @@ async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFue
   clear(ul, items);
 }
 
-function saveRoute(): void {
+/** Standardnavn for en rute: «ENBR–ENKB» når den ikke har fått eget navn. */
+const defaultRouteName = () => {
+  const w = state.route.waypoints;
+  return state.route.name && state.route.name !== 'Ny rute' ? state.route.name : w.length >= 2 ? `${w[0].id}–${w[w.length - 1].id}` : 'Ny rute';
+};
+
+/** Er gjeldende rute allerede lagret uendret? */
+function isSaved(): boolean {
+  const r = state.route;
+  const key = (wps: typeof r.waypoints) => JSON.stringify(wps.map((w) => [w.id, w.lat.toFixed(4), w.lon.toFixed(4), w.legAltFt ?? null]));
+  return state.savedRoutes.some((sr) => key(sr.waypoints) === key(r.waypoints) && sr.altitudeFt === r.altitudeFt);
+}
+
+function saveRoute(name?: string): void {
+  if (name) state.route = { ...state.route, name };
+  else if (state.route.name === 'Ny rute') state.route = { ...state.route, name: defaultRouteName() };
   const r = state.route;
   const existing = state.savedRoutes.find((s) => s.name === r.name);
   const entry = {
@@ -626,12 +641,65 @@ function commitPending(): void {
   }
 }
 
+/** Starter en ny, tom rute – spør først om den gamle skal lagres. */
+async function newRoute(): Promise<void> {
+  const wps = state.route.waypoints;
+  if (wps.length >= 2 && !isSaved()) {
+    const res = await saveDialog(defaultRouteName());
+    if (res === null) return; // Avbryt
+    if (res !== false) saveRoute(res);
+  }
+  pendingFrom = pendingTo = null;
+  state.directTo = null;
+  state.activeIndex = 1;
+  state.setRoute({ name: 'Ny rute', waypoints: [], forecast: null, departureTime: '', fuelOnBoard: null, alternate: '' });
+  toast('Ny rute – velg avgang og destinasjon');
+  setTimeout(() => document.querySelector<HTMLInputElement>('.fromto input')?.focus(), 100);
+}
+
+/**
+ * Spør om ruten skal lagres. Gir navnet (lagre), false (ikke lagre) eller null (avbryt).
+ */
+function saveDialog(suggested: string): Promise<string | false | null> {
+  return new Promise((resolve) => {
+    const name = h('input', { type: 'text', value: suggested, maxlength: 40, class: 'dlg-input' });
+    const done = (v: string | false | null) => {
+      dlg.close();
+      dlg.remove();
+      resolve(v);
+    };
+    const dlg = h(
+      'dialog',
+      { class: 'disclaimer save-dlg' },
+      h('h2', null, 'Lagre ruten?'),
+      h('p', null, 'Ruten du har nå er ikke lagret. Vil du lagre den på telefonen før du lager en ny?'),
+      h('label', { class: 'field' }, h('span', null, 'Navn'), name),
+      h(
+        'div',
+        { class: 'dlg-actions' },
+        h('button', { class: 'primary', onclick: () => done(name.value.trim() || suggested) }, '💾 Lagre og start ny'),
+        h('button', { class: 'danger', onclick: () => done(false) }, 'Ikke lagre'),
+        h('button', { onclick: () => done(null) }, 'Avbryt'),
+      ),
+    );
+    dlg.addEventListener('cancel', (e) => (e.preventDefault(), done(null)));
+    document.body.append(dlg);
+    dlg.showModal();
+  });
+}
+
 function fromToSection(): HTMLElement {
   const wps = state.route.waypoints;
   const from = wps.length >= 2 ? wps[0] : pendingFrom;
   const to = wps.length >= 2 ? wps[wps.length - 1] : pendingTo;
   return section(
     'Fra og til',
+    h(
+      'div',
+      { class: 'row wrap' },
+      h('button', { class: 'primary new-route', onclick: () => void newRoute() }, '＋ Ny rute'),
+      wps.length >= 2 ? h('span', { class: 'muted small' }, isSaved() ? `«${state.route.name}» er lagret` : 'Ikke lagret') : null,
+    ),
     h('div', { class: 'grid2 fromto' }, airportPicker('Fra (avgang)', from, setFrom), airportPicker('Til (destinasjon)', to, setTo)),
     h(
       'p',

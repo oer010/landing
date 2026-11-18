@@ -375,3 +375,10 @@ table.navlog .pr-alt { font-size: 12px; white-space: nowrap; }
 .layer-sheet .ls-base { display: flex; gap: 6px; margin-top: 8px; }
 .layer-sheet .ls-base button { flex: 1; background: #e2e8f0; color: #0f172a; border: 1px solid #94a3b8; font-size: 13px; min-height: 36px; padding: 4px; }
 .layer-sheet .ls-base button.on { background: #1d4ed8; color: #fff; border-color: #1d4ed8; }
+
+/* Ny rute / lagre-dialog */
+button.new-route { font-weight: 700; }
+dialog.save-dlg .dlg-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+dialog.save-dlg .dlg-actions button { min-height: 46px; font-size: 16px; }
+dialog.save-dlg input.dlg-input { width: 100%; font-size: 16px; }
+button.danger { background: #7f1d1d; border-color: #b91c1c; color: #fff; }
