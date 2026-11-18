@@ -436,3 +436,14 @@ button.danger { background: #7f1d1d; border-color: #b91c1c; color: #fff; }
 .perf-box { border-top: 1px solid rgb(148 163 184 / 0.3); padding-top: 8px; margin-top: 8px; }
 .perf-box h4 { margin: 4px 0 8px; }
 tr.warn td { color: #b45309; }
+
+/* Banekart */
+.rwy-diagram-wrap { display: flex; flex-direction: column; align-items: center; gap: 4px; margin-bottom: 8px; }
+.rwy-diagram { width: min(240px, 70vw); height: auto; }
+.rwy-diagram .rose { fill: #f8fafc; stroke: #94a3b8; stroke-width: 1; }
+.rwy-diagram .north { font: 700 11px system-ui, sans-serif; fill: #475569; }
+.rwy-diagram .rwy { stroke: #1f2937; stroke-linecap: butt; }
+.rwy-diagram .rwy-lbl { font: 700 12px system-ui, sans-serif; fill: #111827; }
+.rwy-diagram .wind { stroke: #0284c7; stroke-width: 3; }
+.rwy-diagram .wind-head { fill: #0284c7; }
+.rwy-diagram .wind-lbl { font: 700 11px system-ui, sans-serif; fill: #0369a1; }

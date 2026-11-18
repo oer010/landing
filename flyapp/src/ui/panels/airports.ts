@@ -1,8 +1,10 @@
 import { AIRPORT_TYPE_TEXT, ftToM, nearestAirports, searchAirports, type Airport } from '../../lib/data';
-import { bearingTrue, distanceNm, fmtHdg, formatLatLon, norm360 } from '../../lib/geo';
+import { bearingTrue, distanceNm, fmtHdg, formatLatLon } from '../../lib/geo';
 import { declination, fmtVar, trueToMag } from '../../lib/mag';
 import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin, wxError } from '../../lib/metar';
 import { windComponents } from '../../lib/navlog';
+import { fmtDeg, runwayEnds } from '../../lib/runway';
+import { runwayDiagram } from '../rwydiagram';
 import { sunTimes } from '../../lib/sun';
 import { badge, clear, fmt, h, section, tafView } from '../dom';
 import { addRoutePoint, AIRPORT_COLORS, flyTo, map } from '../map';
@@ -71,7 +73,13 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
   const wxBox = h('div', null, h('p', { class: 'muted' }, 'Henter vær …'));
   const rwyBody = h('tbody');
 
-  const drawRunways = (wind: { dir: number; speed: number } | null) =>
+  const diagram = h('div', { class: 'rwy-diagram-wrap' });
+  const drawRunways = (wind: { dir: number; speed: number } | null) => {
+    const svg = runwayDiagram(a, decl, wind);
+    clear(diagram, svg ?? '', svg ? h('div', { class: 'muted small' }, `Banene sett ovenfra, nord opp${wind ? ` · vind fra ${fmtDeg(wind.dir)} rettvisende, ${wind.speed} kt (METAR)` : ''}. Retninger i grader magnetisk (misvisning ${fmtVar(decl)}).`) : '');
+    drawRunwayRows(wind);
+  };
+  const drawRunwayRows = (wind: { dir: number; speed: number } | null) =>
     clear(
       rwyBody,
       a.runways.map((r) => {
@@ -81,12 +89,14 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
           const hw = c.head >= 0 ? `↓${c.head.toFixed(0)}` : `↑${(-c.head).toFixed(0)}`;
           return `${ident}: ${hw} ${Math.abs(c.cross).toFixed(0)}${c.cross >= 0 ? '→' : '←'}`;
         };
-        const leHdg = r.leHeadingTrue ?? identHeading(r.le, decl);
-        const heHdg = leHdg !== null ? norm360(leHdg + 180) : identHeading(r.he, decl);
+        const [e1, e2] = runwayEnds(r, decl);
+        const leHdg = e1.trueHdg;
+        const heHdg = e2.trueHdg;
         return h(
           'tr',
           null,
           h('td', { class: 'strong' }, `${r.le}/${r.he}`),
+          h('td', null, [`${r.le}: ${fmtDeg(e1.magHdg)}`, h('br'), `${r.he}: ${fmtDeg(e2.magHdg)}`]),
           h('td', null, r.lengthFt ? `${ftToM(r.lengthFt)} m` : '—'),
           h('td', null, r.widthFt ? `${ftToM(r.widthFt)} m` : '—'),
           h('td', null, r.surface || '—'),
@@ -144,11 +154,12 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
     section('Vær', wxBox),
     section(
       'Rullebaner',
+      diagram,
       a.runways.length
         ? h(
             'div',
             { class: 'tablewrap' },
-            h('table', { class: 'mini' }, h('thead', null, h('tr', null, ['Bane', 'Lengde', 'Bredde', 'Dekke', 'Lys', 'Vind (mot/side)'].map((c) => h('th', null, c)))), rwyBody),
+            h('table', { class: 'mini' }, h('thead', null, h('tr', null, ['Bane', 'Retning (°M)', 'Lengde', 'Bredde', 'Dekke', 'Lys', 'Vind (mot/side)'].map((c) => h('th', null, c)))), rwyBody),
           )
         : h('p', { class: 'muted' }, 'Ingen baneinformasjon'),
     ),
@@ -207,8 +218,3 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
 
 const tr = (k: string, v: string) => h('tr', null, h('td', { class: 'muted' }, k), h('td', null, v));
 
-/** Banenummer → rettvisende retning (09 → 090°M → true). */
-function identHeading(ident: string, decl: number): number | null {
-  const m = ident.match(/^(\d{1,2})/);
-  return m ? norm360(+m[1] * 10 + decl) : null;
-}

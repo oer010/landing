@@ -7,6 +7,7 @@ import { AIRPORT_TYPE_TEXT } from '../lib/data';
 import { KV_URL } from '../lib/offline';
 import { loadVfr, type VfrData, type VfrPoint, type VfrRoute } from '../lib/vfrdata';
 import { declination, fmtVar, trueToMag } from '../lib/mag';
+import { fmtDeg, runwayEnds } from '../lib/runway';
 import { sunTimes } from '../lib/sun';
 import { airspacesAt, fmtLimits, KIND_ADVICE, KIND_STYLE, KIND_TEXT, loadAirspace, type AirspaceDb, type AirspaceKind } from '../lib/airspace';
 import { computeNavlog, type Waypoint } from '../lib/navlog';
@@ -306,9 +307,15 @@ export function airportPopup(a: Airport): HTMLElement {
               h(
                 'div',
                 null,
-                a.runways.map((r) =>
-                  h('div', null, h('strong', null, `${r.le}/${r.he}`), ` ${r.lengthFt ? `${Math.round(r.lengthFt * 0.3048)} m` : ''} ${surfaceText(r.surface)}${r.lighted ? ', lys' : ''}`),
-                ),
+                a.runways.map((r) => {
+                  const [e1, e2] = runwayEnds(r, declination(a));
+                  return h(
+                    'div',
+                    null,
+                    h('strong', null, `${r.le}/${r.he}`),
+                    ` ${fmtDeg(e1.magHdg)}/${fmtDeg(e2.magHdg)}M · ${r.lengthFt ? `${Math.round(r.lengthFt * 0.3048)} m` : ''} ${surfaceText(r.surface)}${r.lighted ? ', lys' : ''}`,
+                  );
+                }),
               ),
             )
           : null,
