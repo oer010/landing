@@ -8,7 +8,12 @@ import { readFile, writeFile } from 'node:fs/promises';
 const out = process.argv[2] ?? 'notam.json';
 const URL_ = 'https://notams.aim.faa.gov/notamSearch/search';
 
-const db = JSON.parse(await readFile(new URL('../public/data/airports.json', import.meta.url), 'utf8'));
+// Flyplasslisten: bygget lokalt (public/data) eller den publiserte kopien (vfr/data).
+const db = JSON.parse(
+  await readFile(new URL('../public/data/airports.json', import.meta.url), 'utf8').catch(() =>
+    readFile(new URL('../../vfr/data/airports.json', import.meta.url), 'utf8'),
+  ),
+);
 const idents = db.airports.map((a) => a[0]).filter((id) => /^EN[A-Z]{2}$/.test(id));
 const locs = [...new Set(['ENOR', 'ENOB', ...idents])];
 

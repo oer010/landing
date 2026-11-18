@@ -17,7 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          sparse-checkout: flyapp
+          sparse-checkout: |
+            flyapp/scripts
+            vfr/data
       - uses: actions/setup-node@v4
         with:
           node-version: 22
