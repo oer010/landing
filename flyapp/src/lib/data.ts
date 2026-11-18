@@ -16,6 +16,8 @@ export interface Frequency {
   type: string;
   desc: string;
   mhz: number | null;
+  /** Åpningstid fra AIP (H24, HO, …) når kjent. */
+  hr?: string;
 }
 
 export interface Airport extends LatLon {
@@ -32,6 +34,8 @@ export interface Airport extends LatLon {
   towered: boolean;
   paved: boolean;
   longestFt: number;
+  /** Hvor frekvensene kommer fra. */
+  freqSource: 'AIP' | 'OurAirports';
 }
 
 export interface Navaid extends LatLon {
@@ -56,17 +60,26 @@ export interface AeroDb {
   navaidsByIdent: Map<string, Navaid[]>;
   generated: string;
   region: string;
+  /** Gjeldende AIP Norge-utgave frekvensene er hentet fra (YYYY-MM-DD). */
+  aipEdition?: string;
 }
 
 let dbPromise: Promise<AeroDb> | null = null;
 
 export function loadDb(): Promise<AeroDb> {
-  dbPromise ??= fetch('./data/airports.json')
-    .then((r) => {
+  dbPromise ??= Promise.all([
+    fetch('./data/airports.json').then((r) => {
       if (!r.ok) throw new Error('Fant ikke flyplassdata. Kjør «npm run data».');
       return r.json();
-    })
-    .then(buildDb);
+    }),
+    fetch('./data/aip-freq.json')
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null),
+  ]).then(([raw, aip]) => {
+    const db = buildDb(raw);
+    if (aip) applyAipFrequencies(db, aip);
+    return db;
+  });
   return dbPromise;
 }
 
@@ -99,6 +112,7 @@ export function buildDb(raw: { airports: RawAirport[]; navaids: RawNavaid[]; gen
       runways,
       freqs,
       towered: freqs.some((f) => TOWER_TYPES.has(f.type.toUpperCase())),
+      freqSource: 'OurAirports',
       paved: runways.some((r) => PAVED.test(r.surface)),
       longestFt: Math.max(0, ...runways.map((r) => r.lengthFt ?? 0)),
     };
@@ -174,3 +188,32 @@ export const AIRPORT_TYPE_TEXT: Record<Airport['type'], string> = {
 };
 
 export const ftToM = (ft: number | null) => (ft === null ? null : Math.round(ft * 0.3048));
+
+export interface AipFreqRow {
+  svc: string;
+  call: string;
+  mhz: number[];
+  hr: string;
+  rmk: string;
+}
+
+const SVC_SHORT: Record<string, string> = { SMC: 'GND', CLR: 'DEL', 'ATIS (ARR)': 'ATIS ARR', 'ATIS (DEP)': 'ATIS DEP' };
+
+/** Erstatter OurAirports-frekvenser med AIP Norge (AD 2.18) der det finnes. */
+export function applyAipFrequencies(db: AeroDb, aip: { edition: string; airports: Record<string, AipFreqRow[]> }): void {
+  db.aipEdition = aip.edition;
+  for (const [ident, rows] of Object.entries(aip.airports)) {
+    const a = db.byIdent.get(ident);
+    if (!a || !rows.length) continue;
+    a.freqs = rows.flatMap((r) =>
+      r.mhz.map((mhz) => ({
+        type: SVC_SHORT[r.svc] ?? r.svc,
+        desc: [r.call, r.rmk].filter(Boolean).join(' – '),
+        mhz,
+        hr: r.hr,
+      })),
+    );
+    a.freqSource = 'AIP';
+    a.towered = rows.some((r) => /^(TWR|SMC|APP)/.test(r.svc));
+  }
+}

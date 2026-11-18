@@ -1,5 +1,5 @@
 import { h, section, numField } from '../dom';
-import { airacAgeDays } from '../../lib/airspace';
+import { airspaceStale } from '../../lib/airspace';
 import { getAirspaceDb } from '../map';
 import { state } from '../state';
 
@@ -37,11 +37,12 @@ export function renderSettings(el: HTMLElement): void {
       (() => {
         const db = getAirspaceDb();
         if (!db) return h('p', { class: 'warnbox' }, 'Luftromsdata mangler i denne versjonen.');
-        const age = airacAgeDays(db.airac);
+        const cur = state.db.aipEdition;
+        const stale = airspaceStale(db.airac, cur);
         return h(
           'p',
-          { class: age > 28 ? 'warnbox' : 'muted small' },
-          `${db.airspaces.length} norske luftrom fra AIP Norge (AIRAC ${db.airac}${age > 28 ? `, ${age} dager gammelt` : ''}), konvertert av luftrom.info (relet/pg-xc). Trykk på kartet for å se luftrommene over et punkt. Uten ansvar – sjekk alltid gjeldende AIP, VFR-kart og NOTAM.`,
+          { class: stale ? 'warnbox' : 'muted small' },
+          `${db.airspaces.length} norske luftrom fra AIP Norge (utgave ${db.airac}${cur ? (stale ? `, gjeldende er ${cur}` : ', gjeldende') : ''}), konvertert av luftrom.info (relet/pg-xc). Frekvenser for ${state.db.airports.filter((a) => a.freqSource === "AIP").length} flyplasser fra AIP Norge AD 2.18${cur ? ` (${cur})` : ''}. Trykk på kartet for å se luftrommene over et punkt. Uten ansvar – sjekk alltid gjeldende AIP, VFR-kart og NOTAM.`,
         );
       })(),
     ),

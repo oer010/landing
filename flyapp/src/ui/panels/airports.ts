@@ -158,10 +158,28 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
         ? h(
             'table',
             { class: 'mini' },
-            h('tbody', null, a.freqs.map((f) => tr(f.type, `${f.mhz?.toFixed(3) ?? '—'} ${f.desc && f.desc !== f.type ? `(${f.desc})` : ''}`))),
+            h(
+              'tbody',
+              null,
+              a.freqs.map((f) =>
+                h(
+                  'tr',
+                  null,
+                  h('td', { class: 'muted' }, f.type),
+                  h('td', { class: 'strong' }, f.mhz?.toFixed(3) ?? '—'),
+                  h('td', { class: 'small' }, [f.hr, f.desc && f.desc !== f.type ? f.desc : ''].filter(Boolean).join(' · ')),
+                ),
+              ),
+            ),
           )
         : h('p', { class: 'muted' }, 'Ingen frekvenser i databasen – sjekk AIP.'),
-      h('p', { class: 'muted small' }, 'Data fra OurAirports. Kontroller alltid mot gjeldende AIP/VFR-kart.'),
+      h(
+        'p',
+        { class: a.freqSource === 'AIP' ? 'muted small' : 'warnbox' },
+        a.freqSource === 'AIP'
+          ? `Frekvenser fra AIP Norge (utgave ${state.db.aipEdition ?? '?'}), AD 2.18. Kontroller alltid mot gjeldende AIP og NOTAM.`
+          : 'Frekvenser fra OurAirports (brukerbidrag) – kan være utdatert. Flyplassen står ikke i AIP Norge AD 2; sjekk lokale opplysninger.',
+      ),
     ),
   );
 

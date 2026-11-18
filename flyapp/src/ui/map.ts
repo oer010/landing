@@ -222,13 +222,19 @@ function fromMe(p: LatLon): string | null {
 }
 
 /** Viktigst for VFR først. */
-const FREQ_ORDER = ['TWR', 'AFIS', 'A/G', 'INFO', 'CTAF', 'UNIC', 'ATIS', 'GND', 'APP', 'DEP'];
+const FREQ_ORDER = ['TWR', 'AFIS', 'RADIO', 'A/G', 'INFO', 'CTAF', 'UNIC', 'ATIS', 'GND', 'DEL', 'APP', 'DEP'];
 const sortFreqs = (fs: Airport['freqs']) =>
   [...fs].sort((x, y) => {
     const ix = FREQ_ORDER.findIndex((t) => x.type.toUpperCase().includes(t));
     const iy = FREQ_ORDER.findIndex((t) => y.type.toUpperCase().includes(t));
     return (ix < 0 ? 99 : ix) - (iy < 0 ? 99 : iy);
   });
+
+/** Kort merknad om sektor/rullebane fra AIP (f.eks. «CTR W sector …»), ellers tom. */
+const sectorNote = (desc: string) => {
+  const rmk = desc.split(' – ').slice(1).join(' – ');
+  return /sector|RWY|West|East|Delivery|Ground/i.test(rmk) ? rmk.slice(0, 60) : '';
+};
 
 const row = (k: string, v: Node | string) => h('tr', null, h('th', null, k), h('td', null, v));
 
@@ -283,8 +289,22 @@ export function airportPopup(a: Airport): HTMLElement {
                 'div',
                 null,
                 sortFreqs(a.freqs)
-                  .slice(0, 5)
-                  .map((f) => h('div', null, h('strong', null, f.mhz?.toFixed(3) ?? '—'), ` ${f.type}`)),
+                  .slice(0, 6)
+                  .map((f) =>
+                    h(
+                      'div',
+                      null,
+                      h('strong', null, f.mhz?.toFixed(3) ?? '—'),
+                      ` ${f.type}`,
+                      f.hr && f.hr !== 'H24' ? h('span', { class: 'p-muted' }, ` ${f.hr}`) : null,
+                      sectorNote(f.desc) ? h('div', { class: 'p-muted' }, sectorNote(f.desc)) : null,
+                    ),
+                  ),
+                h(
+                  'div',
+                  { class: 'p-muted' },
+                  a.freqSource === 'AIP' ? `Kilde: AIP Norge ${state.db.aipEdition ?? ''}` : 'Kilde: OurAirports – kan være utdatert, sjekk AIP',
+                ),
               ),
             )
           : row('Frekv.', 'Ingen i databasen – sjekk AIP'),

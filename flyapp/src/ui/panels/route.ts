@@ -1,6 +1,6 @@
 import { fmtHdg, midpoint } from '../../lib/geo';
 import { fetchLegWinds } from '../../lib/winds';
-import { airacAgeDays, airspacesAlongRoute, fmtLimits, KIND_ADVICE, KIND_STYLE } from '../../lib/airspace';
+import { airspaceStale, airspacesAlongRoute, fmtLimits, KIND_ADVICE, KIND_STYLE } from '../../lib/airspace';
 import type { Wind } from '../../lib/navlog';
 import { fmtVar } from '../../lib/mag';
 import { computeNavlog, fmtMin, fuelPlan, suggestVfrAltitude, vfrCruiseAltitudeOk, type NavlogLeg } from '../../lib/navlog';
@@ -267,7 +267,7 @@ async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFue
   const asDb = getAirspaceDb();
   if (asDb) {
     const along = airspacesAlongRoute(asDb, wps, r.altitudeFt);
-    const age = airacAgeDays(asDb.airac);
+    const stale = airspaceStale(asDb.airac, state.db.aipEdition);
     if (!along.length) ok(`Ingen kontrollert/spesielt luftrom langs ruten i ${r.altitudeFt} ft (utenom start/landing).`);
     for (const { airspace: a, atNm } of along) {
       const li = h(
@@ -285,8 +285,8 @@ async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFue
     items.push(
       h(
         'li',
-        { class: age > 28 ? 'warn' : 'muted' },
-        `Luftromsdata: AIRAC ${asDb.airac}${age > 28 ? ` (${age} dager gammelt – sjekk gjeldende AIP/VFR-kart)` : ''}. Gjelder marsjhøyden; stig/sink nær flyplasser vurderes ikke.`,
+        { class: stale ? 'warn' : 'muted' },
+        `Luftromsdata: AIP ${asDb.airac}${stale ? ` – eldre enn gjeldende AIP (${state.db.aipEdition ?? 'ukjent'}), sjekk VFR-kart/AIP` : state.db.aipEdition ? ' (gjeldende utgave)' : ''}. Gjelder marsjhøyden; stig/sink nær flyplasser vurderes ikke.`,
       ),
     );
   }

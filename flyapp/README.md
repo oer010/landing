@@ -96,7 +96,8 @@ AIRAC-datoen vises i appen, med advarsel når dataene er eldre enn én syklus (2
 
 ## Datakilder og lisenser
 
-- Flyplasser, rullebaner, frekvenser og navaids: [OurAirports](https://ourairports.com/data/) (public domain)
+- Frekvenser for norske flyplasser i AIP: [AIP Norge](https://aim-prod.avinor.no/no/AIP) AD 2.18, hentet av `npm run data` (gjeldende utgave)
+- Flyplasser, rullebaner, navaids og frekvenser utenfor AIP Norge: [OurAirports](https://ourairports.com/data/) (public domain, brukerbidrag – kan være utdatert)
 - Kart: © OpenStreetMap-bidragsytere, OpenTopoMap (CC-BY-SA)
 - Vær: [aviationweather.gov Data API](https://aviationweather.gov/data/api/)
 - Luftrom: AIP Norge, konvertert av [luftrom.info / relet/pg-xc](https://github.com/relet/pg-xc) (uten ansvar – sjekk gjeldende AIP og NOTAM). Hentes av `npm run data`.

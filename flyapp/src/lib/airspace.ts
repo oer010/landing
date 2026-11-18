@@ -192,3 +192,13 @@ export function airspacesAlongRoute(db: AirspaceDb, wps: LatLon[], altFt: number
 /** Alder på dataene i dager fra AIRAC-dato. */
 export const airacAgeDays = (airac: string, now = new Date()) =>
   airac ? Math.floor((now.getTime() - Date.parse(`${airac}T00:00:00Z`)) / 86400000) : Infinity;
+
+/**
+ * Er luftromsdataene eldre enn gjeldende AIP-utgave? Norge gir ikke ut ny AIP hver AIRAC,
+ * så alder i dager alene sier lite. Uten kjent utgave: grovt anslag (> 120 dager).
+ */
+export function airspaceStale(airac: string, currentEdition?: string, now = new Date()): boolean {
+  if (!airac) return true;
+  if (currentEdition) return airac < currentEdition;
+  return airacAgeDays(airac, now) > 120;
+}

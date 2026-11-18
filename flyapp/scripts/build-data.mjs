@@ -13,6 +13,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fetchAipFrequencies } from './aip.mjs';
 
 const BASE = (process.env.FLYAPP_DATA_URL || 'https://davidmegginson.github.io/ourairports-data').replace(/\/$/, '');
 const COUNTRIES = (process.env.FLYAPP_COUNTRIES || '')
@@ -128,6 +129,9 @@ function inRegion(country, continent) {
 async function main() {
   await mkdir(dirname(OUT), { recursive: true });
   const airspaceDone = buildAirspace();
+  const aipDone = fetchAipFrequencies()
+    .then((d) => writeFile(join(dirname(OUT), 'aip-freq.json'), JSON.stringify({ generated: new Date().toISOString(), ...d })))
+    .catch((e) => console.warn(`Advarsel: kunne ikke hente frekvenser fra AIP Norge: ${e.message}`));
   const [airports, runways, freqs, navaids] = await Promise.all([
     fetchCsv('airports.csv'),
     fetchCsv('runways.csv'),
@@ -209,6 +213,7 @@ async function main() {
   const json = JSON.stringify(payload);
   await writeFile(OUT, json);
   await airspaceDone;
+  await aipDone;
   console.log(
     `Skrev ${outAirports.length} flyplasser og ${outNavaids.length} navaids (${(json.length / 1e6).toFixed(1)} MB) til ${OUT}`,
   );
