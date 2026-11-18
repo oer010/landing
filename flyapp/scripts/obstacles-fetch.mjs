@@ -15,7 +15,7 @@ area["ISO3166-1"="NO"][admin_level=2]->.no;
   node(area.no)["aeroway:light"="obstacle"];
   node(area.no)["power"="tower"]["height"];
 );
-out tags qt;`;
+out qt;`;
 
 async function query() {
   for (const url of SERVERS)
