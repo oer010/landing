@@ -285,9 +285,10 @@ svg.envelope .pt.bad { fill: var(--bad); stroke: #fff; }
 .leaflet-tooltip.ap-label::before { display: none; }
 .leaflet-marker-icon.navaid-icon { display: grid; place-items: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .navaid-icon span { position: absolute; left: 28px; top: 8px; font-size: 11px; font-weight: 700; color: #1e3a8a; background: rgb(255 255 255 / 0.75); padding: 0 3px; border-radius: 3px; pointer-events: none; }
-.wp-icon .wp-dot { width: 16px; height: 16px; border-radius: 50%; background: #fff; border: 4px solid var(--accent); }
+.leaflet-marker-icon.wp-icon { display: grid; place-items: center; -webkit-tap-highlight-color: transparent; }
+.wp-icon .wp-dot { width: 20px; height: 20px; border-radius: 50%; background: #fff; border: 4px solid var(--accent); box-sizing: border-box; box-shadow: 0 1px 4px rgb(0 0 0 / 0.4); }
 .wp-icon.active .wp-dot { background: var(--accent); border-color: #fff; }
-.wp-icon .wp-label { position: absolute; left: 18px; top: -2px; background: var(--accent); color: #fff; font-weight: 700; font-size: 11px; padding: 1px 4px; border-radius: 4px; white-space: nowrap; }
+.wp-icon .wp-label { position: absolute; left: 32px; top: 10px; pointer-events: none; background: var(--accent); color: #fff; font-weight: 700; font-size: 11px; padding: 1px 4px; border-radius: 4px; white-space: nowrap; }
 .mid-icon div { width: 14px; height: 14px; border-radius: 50%; background: rgb(255 255 255 / 0.8); border: 2px dashed var(--accent); }
 .ownship { filter: drop-shadow(0 0 3px rgb(0 0 0 / 0.6)); }
 .ownship svg { transition: transform 0.4s linear; }
@@ -327,3 +328,16 @@ ul.taf-periods code { display: block; font-size: 12px; white-space: pre-wrap; wo
 .popup .as-flag { color: #b45309 !important; font-weight: 600; font-size: 13px; }
 
 ul.checks .as-dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 2px; }
+
+/* Nytt rutepunkt: pulser så det er lett å se hva som kan dras */
+.wp-icon.fresh .wp-dot { animation: wp-pulse 0.9s ease-in-out infinite; }
+@keyframes wp-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgb(217 70 239 / 0.7); } 50% { box-shadow: 0 0 0 12px rgb(217 70 239 / 0); } }
+
+/* Fra/Til med forslag */
+.field.picker { position: relative; }
+.field.picker input { width: 100%; text-transform: none; }
+.suggest { position: absolute; z-index: 20; top: 100%; left: 0; right: 0; background: #0b1325; border: 1px solid #475569; border-radius: 8px; margin-top: 2px; box-shadow: 0 8px 24px rgb(0 0 0 / 0.5); overflow: hidden; }
+.suggest[hidden] { display: none; }
+.suggest-item { display: block; width: 100%; text-align: left; border: none; border-bottom: 1px solid var(--line); border-radius: 0; background: none; padding: 10px; color: var(--text); font-size: 14px; min-height: 44px; }
+.suggest-item:last-child { border-bottom: none; }
+@media (max-width: 520px) { .grid2.fromto { grid-template-columns: 1fr; } }

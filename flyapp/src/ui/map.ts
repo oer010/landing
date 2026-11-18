@@ -1,14 +1,14 @@
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import type { Airport, Navaid } from '../lib/data';
-import { bearingTrue, destination, distanceNm, fmtHdg, midpoint, formatLatLon, type LatLon } from '../lib/geo';
+import { bearingTrue, destination, distanceNm, fmtHdg, formatLatLon, type LatLon } from '../lib/geo';
 import { CATEGORY_COLORS, categoryOf, fetchMetars, fetchMetarsInBox, metarAgeMin, type Metar } from '../lib/metar';
 import { AIRPORT_TYPE_TEXT } from '../lib/data';
 import { declination, fmtVar, trueToMag } from '../lib/mag';
 import { sunTimes } from '../lib/sun';
 import { airspacesAt, fmtLimits, KIND_ADVICE, KIND_STYLE, KIND_TEXT, loadAirspace, type AirspaceDb, type AirspaceKind } from '../lib/airspace';
 import type { Waypoint } from '../lib/navlog';
-import { badge, clear, fmt, h } from './dom';
+import { badge, clear, fmt, h, toast } from './dom';
 import { airportToWaypoint, navaidToWaypoint, state, userWaypoint } from './state';
 import { activeLeg, directTo } from './position';
 
@@ -483,12 +483,13 @@ function nearestSnap(p: L.LatLng): Waypoint | null {
   return best?.w ?? null;
 }
 
-const wpIcon = (w: Waypoint, active: boolean) =>
+const wpIcon = (w: Waypoint, active: boolean, fresh = false) =>
   L.divIcon({
-    className: `wp-icon${active ? ' active' : ''}`,
+    className: `wp-icon${active ? ' active' : ''}${fresh ? ' fresh' : ''}`,
     html: `<div class="wp-dot"></div><div class="wp-label">${w.id}</div>`,
-    iconSize: [16, 16],
-    iconAnchor: [8, 8],
+    // 40 px gripeområde for fingeren rundt et 20 px punkt.
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
   });
 
 function renderRoute(): void {
@@ -499,6 +500,21 @@ function renderRoute(): void {
   if (latlngs.length > 1) {
     L.polyline(latlngs, { color: '#fff', weight: 8, opacity: 0.8, interactive: false }).addTo(routeLayer);
     L.polyline(latlngs, { color: '#d946ef', weight: 4, opacity: 1, interactive: false }).addTo(routeLayer);
+    // Usynlig, bred treffsone langs ruten: dobbelttrykk legger inn et punkt der.
+    const hit = L.polyline(latlngs, { color: '#000', opacity: 0, weight: 24, interactive: true, bubblingMouseEvents: false }).addTo(routeLayer);
+    let hintTimer: number | undefined;
+    hit.on('click', (e: L.LeafletMouseEvent) => {
+      clearTimeout(hintTimer);
+      // Trykk i enden av ruten (på en flyplass/VOR) skal fortsatt gi info om den.
+      if (nearWaypoint(e.containerPoint) && openNearestAt(e.containerPoint)) return;
+      hintTimer = window.setTimeout(() => toast('Dobbelttrykk på rutestreken for å legge inn et punkt du kan dra'), 380);
+    });
+    hit.on('dblclick', (e: L.LeafletMouseEvent) => {
+      clearTimeout(hintTimer);
+      L.DomEvent.stop(e);
+      map.closePopup();
+      insertRoutePointAt(e.containerPoint);
+    });
   }
   const leg = activeLeg();
   if (leg && !state.directTo) {
@@ -523,7 +539,7 @@ function renderRoute(): void {
 
   wps.forEach((w, i) => {
     const m = L.marker([w.lat, w.lon], {
-      icon: wpIcon(w, !state.directTo && i === state.activeIndex),
+      icon: wpIcon(w, !state.directTo && i === state.activeIndex, i === justInserted),
       draggable: true,
       autoPan: true,
     }).addTo(routeLayer);
@@ -560,22 +576,7 @@ function renderRoute(): void {
     );
   });
 
-  // Gummistrikk: dra et midtpunkt for å sette inn et nytt veipunkt.
-  for (let i = 1; i < wps.length; i++) {
-    const mid = midpoint(wps[i - 1], wps[i]);
-    const mm = L.marker([mid.lat, mid.lon], {
-      icon: L.divIcon({ className: 'mid-icon', html: '<div></div>', iconSize: [14, 14], iconAnchor: [7, 7] }),
-      draggable: true,
-      title: 'Dra for å legge inn et veipunkt',
-    }).addTo(routeLayer);
-    mm.on('dragend', () => {
-      const ll = mm.getLatLng();
-      const w = nearestSnap(ll) ?? userWaypoint({ lat: ll.lat, lon: ll.lng });
-      const next = [...state.route.waypoints];
-      next.splice(i, 0, w);
-      state.setWaypoints(next);
-    });
-  }
+  // Nye punkter: dobbelttrykk på rutestreken (se treffsonen over).
 }
 
 /** Utsnitt som ikke dekkes av panelet (sidepanel på stor skjerm, bunnark på mobil). */
@@ -780,6 +781,40 @@ function showAirspacesAt(p: LatLon): void {
 }
 
 export const getAirspaceDb = () => asDb;
+
+/** Er trykket nær et eksisterende veipunkt (piksler)? */
+function nearWaypoint(pt: L.Point, px = 18): boolean {
+  return state.route.waypoints.some((w) => pt.distanceTo(map.latLngToContainerPoint([w.lat, w.lon])) <= px);
+}
+
+/** Legger inn et brukerpunkt på det legget som er nærmest trykket, akkurat på streken. */
+function insertRoutePointAt(pt: L.Point): void {
+  const wps = state.route.waypoints;
+  if (wps.length < 2 || nearWaypoint(pt)) return;
+  let best = { i: 1, d: Infinity, p: pt };
+  for (let i = 1; i < wps.length; i++) {
+    const a = map.latLngToContainerPoint([wps[i - 1].lat, wps[i - 1].lon]);
+    const b = map.latLngToContainerPoint([wps[i].lat, wps[i].lon]);
+    const ab = b.subtract(a);
+    const len2 = ab.x * ab.x + ab.y * ab.y || 1;
+    const t = Math.max(0, Math.min(1, ((pt.x - a.x) * ab.x + (pt.y - a.y) * ab.y) / len2));
+    const p = L.point(a.x + ab.x * t, a.y + ab.y * t);
+    const d = p.distanceTo(pt);
+    if (d < best.d) best = { i, d, p };
+  }
+  const ll = map.containerPointToLatLng(best.p);
+  const next = [...wps];
+  next.splice(best.i, 0, userWaypoint({ lat: ll.lat, lon: ll.lng }));
+  justInserted = best.i;
+  state.setWaypoints(next);
+  navigator.vibrate?.(15);
+  toast('Punkt lagt inn – dra det dit ruten skal gå');
+  window.setTimeout(() => {
+    justInserted = -1;
+    renderRoute();
+  }, 4000);
+}
+let justInserted = -1;
 
 const TAP_RADIUS_PX = 26;
 

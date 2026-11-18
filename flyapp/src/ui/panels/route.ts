@@ -1,7 +1,7 @@
 import { fmtHdg, midpoint } from '../../lib/geo';
 import { fetchLegWinds } from '../../lib/winds';
 import { airspaceStale, airspacesAlongRoute, fmtLimits, KIND_ADVICE, KIND_STYLE } from '../../lib/airspace';
-import type { Wind } from '../../lib/navlog';
+import type { Waypoint, Wind } from '../../lib/navlog';
 import { fmtVar } from '../../lib/mag';
 import { computeNavlog, fmtMin, fuelPlan, suggestVfrAltitude, vfrCruiseAltitudeOk, type NavlogLeg } from '../../lib/navlog';
 import { categoryOf, CATEGORY_COLORS, fetchMetars, wxError } from '../../lib/metar';
@@ -12,7 +12,8 @@ import { isNative } from '../../lib/platform';
 import { badge, clear, fmt, h, numField, section, textField, toast } from '../dom';
 import { fitRoute, getAirspaceDb, isEditMode, setEditMode } from '../map';
 import { setActiveIndex, startSim, stopSim, simActive } from '../position';
-import { activeLegWinds, forecastKey, parseRouteString, routeToString, state } from '../state';
+import { activeLegWinds, airportToWaypoint, forecastKey, parseRouteString, routeToString, state } from '../state';
+import { searchAirports } from '../../lib/data';
 
 export function renderRoute(el: HTMLElement): void {
   const r = state.route;
@@ -95,6 +96,7 @@ export function renderRoute(el: HTMLElement): void {
   });
 
   el.append(
+    fromToSection(),
     section(
       'Rute',
       h('div', { class: 'row' }, routeInput, h('button', { class: 'primary', onclick: applyText }, 'Bruk')),
@@ -107,7 +109,7 @@ export function renderRoute(el: HTMLElement): void {
             class: isEditMode() ? 'toggle on' : 'toggle',
             onclick: () => {
               setEditMode(!isEditMode());
-              toast(isEditMode() ? 'Trykk på kartet for å legge til punkter. Dra midtpunkter for å sette inn.' : 'Redigering av');
+              toast(isEditMode() ? 'Trykk på kartet for å legge til punkter på slutten av ruten.' : 'Redigering av');
               state.emit('route');
             },
           },
@@ -534,4 +536,112 @@ function fmtRange(v: number[]): string {
   const lo = Math.round(Math.min(...v));
   const hi = Math.round(Math.max(...v));
   return lo === hi ? `${lo}` : `${lo} til ${hi}`;
+}
+
+// ---------- Fra/Til ----------
+
+/** Valgt avgang/destinasjon før ruten har to punkter. */
+let pendingFrom: Waypoint | null = null;
+let pendingTo: Waypoint | null = null;
+
+function setFrom(w: Waypoint): void {
+  const wps = state.route.waypoints;
+  if (wps.length >= 2) return state.setWaypoints([w, ...wps.slice(1)]);
+  pendingFrom = w;
+  commitPending();
+}
+
+function setTo(w: Waypoint): void {
+  const wps = state.route.waypoints;
+  if (wps.length >= 2) return state.setWaypoints([...wps.slice(0, -1), w]);
+  pendingTo = w;
+  commitPending();
+}
+
+function commitPending(): void {
+  if (pendingFrom && pendingTo) {
+    state.setWaypoints([pendingFrom, pendingTo]);
+    pendingFrom = pendingTo = null;
+    fitRoute();
+    toast('Rute lagt inn. Dobbelttrykk på rutestreken for å legge inn punkter du kan dra.', 'info', 6000);
+  } else {
+    state.emit('route');
+  }
+}
+
+function fromToSection(): HTMLElement {
+  const wps = state.route.waypoints;
+  const from = wps.length >= 2 ? wps[0] : pendingFrom;
+  const to = wps.length >= 2 ? wps[wps.length - 1] : pendingTo;
+  return section(
+    'Fra og til',
+    h('div', { class: 'grid2 fromto' }, airportPicker('Fra (avgang)', from, setFrom), airportPicker('Til (destinasjon)', to, setTo)),
+    h(
+      'p',
+      { class: 'muted small' },
+      wps.length >= 2
+        ? 'Dobbelttrykk på rutestreken på kartet for å legge inn et punkt, og dra det dit du vil at ruten skal gå. Punkter fester seg til flyplasser og VOR når du slipper dem i nærheten.'
+        : 'Velg avgang og destinasjon – søk på ICAO-kode, navn eller sted.',
+    ),
+  );
+}
+
+function airportPicker(label: string, current: Waypoint | null, onPick: (w: Waypoint) => void): HTMLElement {
+  const list = h('div', { class: 'suggest', hidden: true });
+  const input = h('input', {
+    type: 'search',
+    value: current ? `${current.id}${current.name ? ` – ${current.name}` : ''}` : '',
+    placeholder: 'ICAO, navn eller sted',
+    autocomplete: 'off',
+    autocapitalize: 'characters',
+    spellcheck: 'false',
+    enterkeyhint: 'done',
+  });
+  let hits: ReturnType<typeof searchAirports> = [];
+  const pick = (i: number) => {
+    const a = hits[i];
+    if (!a) return;
+    list.hidden = true;
+    input.value = `${a.ident} – ${a.name}`;
+    input.blur();
+    onPick(airportToWaypoint(a));
+  };
+  const show = () => {
+    const q = input.value.trim();
+    hits = q.length >= 2 ? searchAirports(state.db, q, 6) : [];
+    clear(
+      list,
+      hits.map((a, i) =>
+        h(
+          'button',
+          {
+            type: 'button',
+            class: 'suggest-item',
+            // pointerdown (ikke click): ellers lukker blur listen før valget registreres.
+            onpointerdown: (e: Event) => {
+              e.preventDefault();
+              pick(i);
+            },
+          },
+          h('strong', null, a.ident),
+          ` ${a.name}`,
+          h('span', { class: 'muted small' }, ` ${a.city || a.country}`),
+        ),
+      ),
+    );
+    list.hidden = !hits.length;
+  };
+  input.addEventListener('input', show);
+  input.addEventListener('focus', () => {
+    input.select();
+    show();
+  });
+  input.addEventListener('blur', () => setTimeout(() => (list.hidden = true), 150));
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      pick(0);
+    }
+  });
+  return h('label', { class: 'field picker' }, h('span', null, label), input, list);
 }
