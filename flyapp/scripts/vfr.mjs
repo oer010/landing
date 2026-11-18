@@ -9,8 +9,10 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { chartPoints } from './vfrsymbols.mjs';
 
 const run = promisify(execFile);
+const fold = (t) => t.toUpperCase().normalize('NFC');
 const R = 3440.065;
 const toRad = Math.PI / 180;
 const distNm = (a, b) => {
@@ -19,7 +21,8 @@ const distNm = (a, b) => {
 };
 
 // Hindertall kan stå klistret inntil koordinaten i PDF-teksten («1726595100N») – hopp over dem.
-const COORD = /([A-ZÆØÅ][A-ZÆØÅa-zæøå0-9\-./ ]{1,32}?)\s+(?:\d+(?=\d{6}(?:\.\d+)?[NS]))?(\d{2})(\d{2})(\d{2}(?:\.\d+)?)([NS])\s+(\d{3})(\d{2})(\d{2}(?:\.\d+)?)([EW])/g;
+// …og et hindertall kan stå mellom navn og koordinat («BERG 4344 693418N»).
+const COORD = /([A-ZÆØÅ][A-ZÆØÅa-zæøå0-9\-./ ]{1,32}?)\s+(?:\d{2,5}\s+)?(?:\d+(?=\d{6}(?:\.\d+)?[NS]))?(\d{2})(\d{2})(\d{2}(?:\.\d+)?)([NS])\s+(\d{3})(\d{2})(\d{2}(?:\.\d+)?)([EW])/g;
 
 /** Navn + koordinater fra tekst på et kart. */
 export function parseChartPoints(text) {
@@ -116,19 +119,45 @@ export async function buildVfrPoints({ pages, graphicsBase, ifrNames, ap, get, c
           log(`  ${ident} ${c.title}: georeferering feilet: ${e.message}`);
         }
       }
-      for (const p of parseChartPoints(text)) {
+      // Symboler på kartet: obligatorisk (▲) / på forespørsel (△), og punkter som bare står på kartet.
+      let found;
+      try {
+        found = (await chartPoints(buf)).points;
+      } catch (e) {
+        log(`  ${ident} ${c.title}: symbollesing feilet (${e.message}) – bruker bare tabellen`);
+        found = parseChartPoints(text).map((p) => ({ ...p, compulsory: null, src: 'table', accuracyM: null }));
+      }
+      const adName = fold(ap.get(ident)?.name ?? '');
+      for (const p of found) {
         if (!vfrOnly && /^[A-Z]{5}$/.test(p.n) && ifrNames.has(p.n)) continue;
+        // Navn lest fra kartet som er flyplassens eget navn (f.eks. «HAUKÅSEN» ved Sogndal) er ikke punkter.
+        if (p.src === 'chart' && adName && fold(p.n).split(' ').every((w) => adName.includes(w))) continue;
         const pos = ap.get(ident);
         if (pos && distNm(pos, p) > 45) continue; // feiltolket koordinat
-        const dup = points.find((q) => q.n === p.n && distNm(q, p) < 0.2);
+        const dup = points.find((q) => q.n === p.n && distNm(q, p) < (p.src === 'chart' || q.src === 'chart' ? 1 : 0.2));
         if (dup) {
           if (!dup.ad.includes(ident)) dup.ad.push(ident);
+          if (p.compulsory !== null) {
+            dup.c = dup.c === 1 || p.compulsory ? 1 : 0;
+            dup.cad = { ...(dup.cad ?? {}), [ident]: p.compulsory ? 1 : 0 };
+          }
+          // Tabellkoordinat slår posisjon lest fra kartet.
+          if (dup.src === 'chart' && p.src === 'table') Object.assign(dup, { lat: +p.lat.toFixed(5), lon: +p.lon.toFixed(5), src: 'table', acc: undefined });
           continue;
         }
-        points.push({ n: p.n, lat: +p.lat.toFixed(5), lon: +p.lon.toFixed(5), ad: [ident] });
+        points.push({
+          n: p.n,
+          lat: +p.lat.toFixed(5),
+          lon: +p.lon.toFixed(5),
+          ad: [ident],
+          // c: 1 = obligatorisk, 0 = på forespørsel, utelatt = ukjent
+          ...(p.compulsory === null ? {} : { c: p.compulsory ? 1 : 0, cad: { [ident]: p.compulsory ? 1 : 0 } }),
+          src: p.src,
+          ...(p.src === 'chart' ? { acc: p.accuracyM } : {}),
+        });
       }
     }
   }
-  log(`VFR: ${points.length} rapporteringspunkter fra ${pdfs} kart (${Object.keys(charts).length} flyplasser med VFR-kart), ${overlays.length} VFR-kart lagt over kartet`);
+  log(`VFR: ${points.length} rapporteringspunkter (${points.filter((p) => p.c === 1).length} obligatoriske, ${points.filter((p) => p.src === 'chart').length} lest fra kartsymbol) fra ${pdfs} kart (${Object.keys(charts).length} flyplasser med VFR-kart), ${overlays.length} VFR-kart lagt over kartet`);
   return { points, charts, overlays };
 }

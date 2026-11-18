@@ -9,3 +9,7 @@ declare module '*/scripts/vfr.mjs' {
   export function parseChartPoints(text: string): { n: string; lat: number; lon: number }[];
   export function isVfrChart(title: string): boolean;
 }
+declare module '*/scripts/vfrsymbols.mjs' {
+  export function findSymbols(svg: string): { x: number; y: number; filled: boolean }[];
+  export function gridFit(words: { x0: number; y0: number; x1: number; y1: number; w: string }[]): { toLL(x: number, y: number): { lat: number; lon: number } } | null;
+}

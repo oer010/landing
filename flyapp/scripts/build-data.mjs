@@ -211,7 +211,7 @@ async function main() {
   await writeFile(OUT, json);
   await airspaceDone;
   try {
-    const ap = new Map(outAirports.map((a) => [a[0], { lat: a[3], lon: a[4] }]));
+    const ap = new Map(outAirports.map((a) => [a[0], { lat: a[3], lon: a[4], name: a[1] }]));
     const { vfr, ...freq } = await fetchAipData({ ap, chartDir: join(dirname(OUT), 'vfrcharts') });
     await writeFile(join(dirname(OUT), 'aip-freq.json'), JSON.stringify({ generated: new Date().toISOString(), ...freq }));
     if (vfr) await writeFile(join(dirname(OUT), 'vfr.json'), JSON.stringify({ generated: new Date().toISOString(), edition: freq.edition, ...vfr }));

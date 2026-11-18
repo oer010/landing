@@ -6,6 +6,14 @@ export interface VfrPoint {
   lon: number;
   /** Flyplass(er) punktet hører til. */
   ad: string[];
+  /** 1 = obligatorisk (fylt ▲), 0 = på forespørsel (åpen △), mangler = ukjent. */
+  c?: 0 | 1;
+  /** Type per flyplass (et punkt kan være obligatorisk for én flyplass og frivillig for en annen). */
+  cad?: Record<string, 0 | 1>;
+  /** 'table' = koordinat fra kartets tabell, 'chart' = posisjon lest fra symbolet på kartet. */
+  src?: 'table' | 'chart';
+  /** Nøyaktighet (m) når posisjonen er lest fra kartet. */
+  acc?: number;
 }
 
 export interface VfrChartLink {

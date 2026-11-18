@@ -425,7 +425,8 @@ export function renderAerodata(): void {
       L.marker([p.lat, p.lon], {
         icon: L.divIcon({
           className: 'vrp-icon',
-          html: `<svg viewBox="0 0 20 18" width="18" height="16"><polygon points="10,1 19,17 1,17" fill="rgb(255 255 255 / 0.7)" stroke="#1d4ed8" stroke-width="2.2" stroke-linejoin="round"/></svg>${z >= 9 ? `<span>${p.n}</span>` : ''}`,
+          // Som på AIP-kartene: fylt ▲ = obligatorisk, åpen △ = på forespørsel.
+          html: `<svg viewBox="0 0 20 18" width="18" height="16"><polygon points="10,1 19,17 1,17" fill="${p.c === 1 ? '#1d4ed8' : 'rgb(255 255 255 / 0.75)'}" stroke="#1d4ed8" stroke-width="2.2" stroke-linejoin="round"${p.c === undefined ? ' stroke-dasharray="3 2"' : ''}/></svg>${z >= 9 ? `<span${p.c === 1 ? ' class="comp"' : ''}>${p.n}</span>` : ''}`,
           iconSize: [30, 30],
           iconAnchor: [15, 17],
         }),
@@ -863,11 +864,37 @@ function vfrPointPopup(p: VfrPoint): HTMLElement {
     'div',
     { class: 'popup' },
     h('div', { class: 'p-title' }, p.n),
-    h('div', { class: 'p-muted' }, `VFR-rapporteringspunkt · ${p.ad.map((a) => `${a} ${state.db.byIdent.get(a)?.name ?? ''}`.trim()).join(', ')}`),
+    h(
+      'div',
+      { class: `p-kind ${p.c === 1 ? 'comp' : ''}` },
+      p.c === 1 ? '▲ Obligatorisk rapporteringspunkt' : p.c === 0 ? '△ Rapporteringspunkt på forespørsel' : 'Rapporteringspunkt (type ukjent – sjekk kartet)',
+    ),
+    h(
+      'div',
+      { class: 'p-muted' },
+      p.ad
+        .map((a) => {
+          const t = p.cad?.[a];
+          const mark = p.ad.length > 1 && t !== undefined ? (t === 1 ? '▲ ' : '△ ') : '';
+          return `${mark}${a} ${state.db.byIdent.get(a)?.name ?? ''}`.trim();
+        })
+        .join(' · '),
+    ),
     h(
       'table',
       { class: 'p-table' },
-      h('tbody', null, row('Posisjon', formatLatLon(p)), me ? row('Fra deg', me) : null, row('Kilde', `AIP Norge ${vfr?.edition ?? ''} (VFR-/innflygingskart)`)),
+      h(
+        'tbody',
+        null,
+        row('Posisjon', formatLatLon(p)),
+        me ? row('Fra deg', me) : null,
+        row(
+          'Kilde',
+          p.src === 'chart'
+            ? `Avlest fra symbolet på AIP-kartet (±${p.acc ?? 100} m) – står ikke i kartets koordinattabell`
+            : `AIP Norge ${vfr?.edition ?? ''}, koordinattabell på VFR-/innflygingskartet`,
+        ),
+      ),
     ),
     h(
       'div',

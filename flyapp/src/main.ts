@@ -134,6 +134,7 @@ function mapButtons(): HTMLElement {
           ` ${label}`,
         ),
       ),
+      h('div', { class: 'ls-legend' }, '▲ obligatorisk rapporteringspunkt · △ på forespørsel'),
       h(
         'div',
         { class: 'ls-base' },
