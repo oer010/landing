@@ -3,6 +3,7 @@ import { loadDb } from './lib/data';
 import { setAirportLookup } from './lib/metar';
 import { clear, h, toast } from './ui/dom';
 import { initDatabar } from './ui/databar';
+import { initAutoWind } from './ui/autowind';
 import { fitRoute, initMap, map } from './ui/map';
 import { cancelDirectTo, gpsActive, simActive, startGps, startRecording, stopGps, stopRecording, stopSim } from './ui/position';
 import { state } from './ui/state';
@@ -19,7 +20,7 @@ import { renderSettings } from './ui/panels/settings';
 type PanelId = 'route' | 'airports' | 'weather' | 'aircraft' | 'tools' | 'logbook' | 'checklists' | 'settings';
 
 const PANELS: Record<PanelId, { title: string; tab: string; icon: string; render: (el: HTMLElement) => void; events: Parameters<typeof state.on>[0][] }> = {
-  route: { title: 'Rute og navlogg', tab: 'Rute', icon: '⟋', render: renderRoute, events: ['route', 'aircraft', 'airspace'] },
+  route: { title: 'Rute og navlogg', tab: 'Rute', icon: '⟋', render: renderRoute, events: ['route', 'aircraft', 'airspace', 'wind'] },
   airports: { title: 'Flyplasser', tab: 'Plasser', icon: '◎', render: renderAirports, events: ['select'] },
   weather: { title: 'Vær', tab: 'Vær', icon: '☁', render: renderWeather, events: ['route'] },
   aircraft: { title: 'Fly, masse og balanse', tab: 'Fly', icon: '✈', render: renderAircraft, events: ['aircraft'] },
@@ -170,6 +171,7 @@ async function main(): Promise<void> {
     state.db = { airports: [], navaids: [], byIdent: new Map(), navaidsByIdent: new Map(), generated: new Date().toISOString(), region: '–' };
   }
   setAirportLookup((id) => state.db.byIdent.get(id));
+  initAutoWind();
   initMap(mapEl);
   document.getElementById('loading')?.remove();
 

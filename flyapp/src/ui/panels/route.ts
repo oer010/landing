@@ -1,5 +1,5 @@
-import { fmtHdg, midpoint } from '../../lib/geo';
-import { fetchLegWinds } from '../../lib/winds';
+import { fmtHdg } from '../../lib/geo';
+import { fetchForecastWind, windStatus } from '../autowind';
 import { airspaceStale, airspacesAlongRoute, fmtLimits, KIND_ADVICE, KIND_STYLE } from '../../lib/airspace';
 import type { Waypoint, Wind } from '../../lib/navlog';
 import { fmtVar } from '../../lib/mag';
@@ -12,7 +12,7 @@ import { isNative } from '../../lib/platform';
 import { badge, clear, fmt, h, numField, section, textField, toast } from '../dom';
 import { fitRoute, getAirspaceDb, isEditMode, setEditMode } from '../map';
 import { setActiveIndex, startSim, stopSim, simActive } from '../position';
-import { activeLegWinds, airportToWaypoint, forecastKey, parseRouteString, routeToString, state } from '../state';
+import { activeLegWinds, airportToWaypoint, parseRouteString, routeToString, state } from '../state';
 import { searchAirports } from '../../lib/data';
 
 export function renderRoute(el: HTMLElement): void {
@@ -134,7 +134,7 @@ export function renderRoute(el: HTMLElement): void {
       ),
       h('p', { class: 'muted small' }, `TAS ${ac.tas} kt · forbruk ${ac.fuelBurn} ${ac.fuelUnit}/t (fra flyprofilen)`),
     ),
-    windSection(legs, dep),
+    windSection(dep),
   );
 
   if (legs.length) {
@@ -210,15 +210,27 @@ const row = (k: string, v: number, unit: string, strong = false) =>
   h('tr', { class: strong ? 'strong' : '' }, h('td', null, k), h('td', null, `${fmt.n(v, 1)} ${unit}`));
 
 function navlogTable(legs: NavlogLeg[], fuelUnit: string): HTMLElement {
+  const ac = state.currentAircraft;
+  const fc = activeLegWinds();
+  const ws = windStatus();
+  const manual = state.route.windSpeed > 0;
+  const windInfo = fc
+    ? h('p', { class: 'small' }, `TAS ${ac.tas} kt · vind fra prognose per legg (rettvisende retning/styrke i kt) · GS, tid og drivstoff er beregnet med vinden.`)
+    : ws.state === 'loading'
+      ? h('p', { class: 'small' }, `TAS ${ac.tas} kt · henter vind …`)
+      : manual
+        ? h('p', { class: 'small' }, `TAS ${ac.tas} kt · manuell vind ${String(state.route.windDir).padStart(3, '0')}°/${state.route.windSpeed} kt på alle legg.`)
+        : h('p', { class: 'warnbox' }, `Vind mangler – GS, tid og drivstoff under er uten vind (GS = TAS ${ac.tas} kt). Hent vind under «Vind i marsjhøyden».`);
   return section(
     'Navigasjonslogg',
+    windInfo,
     h(
       'div',
       { class: 'tablewrap' },
       h(
         'table',
         { class: 'navlog' },
-        h('thead', null, h('tr', null, ['Til', 'Vind', 'TC', 'Var', 'MC', 'WCA', 'MH', 'Dist', 'GS', 'ETE', 'Fuel', 'Σ tid'].map((c) => h('th', null, c)))),
+        h('thead', null, h('tr', null, ['Til', 'Vind', 'Temp', 'TC', 'Var', 'MC', 'WCA', 'MH', 'Dist', 'GS', 'ETE', 'Fuel', 'Σ tid'].map((c) => h('th', null, c)))),
         h(
           'tbody',
           null,
@@ -227,7 +239,8 @@ function navlogTable(legs: NavlogLeg[], fuelUnit: string): HTMLElement {
               'tr',
               null,
               h('td', { class: 'wp-id' }, l.to.id),
-              h('td', { title: windTitle(i) }, fmtWind(l.wind)),
+              h('td', { title: windTitle(i), class: 'strong' }, fmtLegWind(i, l.wind)),
+              h('td', null, legTemp(i)),
               h('td', null, fmtHdg(l.tc)),
               h('td', null, fmtVar(l.variation)),
               h('td', { class: 'strong' }, fmtHdg(l.mc)),
@@ -447,13 +460,13 @@ function printNavlog(legs: NavlogLeg[]): void {
       h(
         'tbody',
         null,
-        legs.map((l) =>
+        legs.map((l, i) =>
           h(
             'tr',
             null,
             h('td', null, l.from.id),
             h('td', null, l.to.id),
-            h('td', null, fmtWind(l.wind)),
+            h('td', null, fmtLegWind(i, l.wind)),
             h('td', null, fmtHdg(l.mc)),
             h('td', null, l.mh === null ? '' : fmtHdg(l.mh)),
             h('td', null, l.dist.toFixed(1)),
@@ -476,37 +489,37 @@ function printNavlog(legs: NavlogLeg[]): void {
   } else window.print();
 }
 
-const fmtWind = (w: Wind) => (w.speed < 0.5 ? 'stille' : `${fmtHdg(w.dir)}/${Math.round(w.speed)}`);
+/** Vind som retning/styrke, f.eks. «270°/15». Ikke hentet (manuell 0) → «—». */
+function fmtLegWind(i: number, w: Wind): string {
+  const fc = activeLegWinds()?.[i];
+  const manualSet = state.route.windSpeed > 0;
+  if (!fc && !manualSet) return '—';
+  const ww = fc ?? w;
+  const dir = ww.speed < 0.5 ? '000' : fmtHdg(ww.dir);
+  return `${dir}°/${Math.round(ww.speed)}`;
+}
+
+function legTemp(i: number): string {
+  const t = activeLegWinds()?.[i]?.tempC;
+  return typeof t === 'number' ? `${Math.round(t)}°` : '—';
+}
 
 function windTitle(i: number): string {
   const w = activeLegWinds()?.[i];
   return w ? `Prognose${w.tempC !== null ? `, ${w.tempC.toFixed(0)} °C` : ''}` : 'Manuell vind';
 }
 
-function windSection(legs: NavlogLeg[], dep: Date): HTMLElement {
+function windSection(dep: Date): HTMLElement {
   const r = state.route;
   const active = activeLegWinds(r);
   const stale = r.forecast && !active;
-  const btn = h('button', { class: 'primary', disabled: r.waypoints.length < 2 }, '☁ Hent vind fra prognose');
-  btn.onclick = async () => {
-    btn.disabled = true;
-    btn.textContent = 'Henter …';
-    try {
-      // Midt i hvert legg, til tidspunktet vi er der.
-      const reqs = legs.map((l) => {
-        const before = (l.cumMin ?? 0) - (l.eteMin ?? 0) / 2;
-        return { point: midpoint(l.from, l.to), time: new Date(dep.getTime() + Math.max(0, before) * 60000) };
-      });
-      const winds = await fetchLegWinds(reqs, r.altitudeFt);
-      if (winds.every((w) => !w)) throw new Error('Prognosen dekker ikke avgangstidspunktet.');
-      state.setRoute({ forecast: { key: forecastKey(state.route), fetchedAt: new Date().toISOString(), winds } });
-      toast('Prognosevind lagt inn i navloggen');
-    } catch (e) {
-      toast((e as Error).message || 'Kunne ikke hente vind (offline?)', 'error', 7000);
-      btn.disabled = false;
-      btn.textContent = '☁ Hent vind fra prognose';
-    }
-  };
+  const ws = windStatus();
+  const loading = ws.state === 'loading';
+  const btn = h(
+    'button',
+    { class: 'primary', disabled: r.waypoints.length < 2 || loading, onclick: () => void fetchForecastWind(true) },
+    loading ? 'Henter vind …' : active ? '↻ Hent vind på nytt' : '☁ Hent vind fra prognose',
+  );
   const temps = active?.map((w) => w?.tempC).filter((t): t is number => typeof t === 'number') ?? [];
   return section(
     'Vind i marsjhøyden',
@@ -518,9 +531,13 @@ function windSection(legs: NavlogLeg[], dep: Date): HTMLElement {
           `✓ Prognosevind per legg i ${r.altitudeFt} ft, for avgang ${fmt.time(dep)} (hentet ${fmt.time(new Date(r.forecast!.fetchedAt))}).`,
           temps.length ? ` Temperatur i høyden ${fmtRange(temps)} °C.` : '',
         )
-      : stale
-        ? h('p', { class: 'warnbox' }, 'Ruten, høyden eller avgangstiden er endret – hent vinden på nytt.')
-        : h('p', { class: 'muted small' }, 'Henter vind og temperatur fra værmodell (Open-Meteo) for hvert legg, i marsjhøyden og til tidspunktet du er der. Sett avgangstid først.'),
+      : loading
+        ? h('p', { class: 'small' }, '☁ Henter vind og temperatur i marsjhøyden for hvert legg …')
+        : ws.state === 'error'
+          ? h('p', { class: 'warnbox' }, `Kunne ikke hente vind: ${ws.message}. Prøv igjen, eller legg inn vind manuelt under.`)
+          : stale
+            ? h('p', { class: 'warnbox' }, 'Ruten, høyden eller avgangstiden er endret – vinden hentes på nytt automatisk.')
+            : h('p', { class: 'muted small' }, 'Vind og temperatur hentes automatisk fra værmodell (Open-Meteo) for hvert legg, i marsjhøyden og til tidspunktet du er der. Sett avgangstid for best resultat.'),
     h(
       'div',
       { class: 'grid2' },
