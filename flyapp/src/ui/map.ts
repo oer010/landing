@@ -502,18 +502,13 @@ function renderRoute(): void {
     L.polyline(latlngs, { color: '#d946ef', weight: 4, opacity: 1, interactive: false }).addTo(routeLayer);
     // Usynlig, bred treffsone langs ruten: dobbelttrykk legger inn et punkt der.
     const hit = L.polyline(latlngs, { color: '#000', opacity: 0, weight: 24, interactive: true, bubblingMouseEvents: false }).addTo(routeLayer);
-    let hintTimer: number | undefined;
-    hit.on('click', (e: L.LeafletMouseEvent) => {
-      clearTimeout(hintTimer);
-      // Trykk i enden av ruten (på en flyplass/VOR) skal fortsatt gi info om den.
-      if (nearWaypoint(e.containerPoint) && openNearestAt(e.containerPoint)) return;
-      hintTimer = window.setTimeout(() => toast('Dobbelttrykk på rutestreken for å legge inn et punkt du kan dra'), 380);
-    });
+    hit.on('click', (e: L.LeafletMouseEvent) => onRouteLineTap(e.containerPoint, e.latlng));
+    // Ekte dblclick (PC/mus): ikke zoom, legg inn punkt.
     hit.on('dblclick', (e: L.LeafletMouseEvent) => {
-      clearTimeout(hintTimer);
       L.DomEvent.stop(e);
+      lastLineTap = null;
       map.closePopup();
-      insertRoutePointAt(e.containerPoint);
+      insertRoutePointAt(e.latlng);
     });
   }
   const leg = activeLeg();
@@ -782,13 +777,78 @@ function showAirspacesAt(p: LatLon): void {
 
 export const getAirspaceDb = () => asDb;
 
+/**
+ * Trykk på rutestreken. iPhone-Safari sender ikke alltid dblclick til siden, så vi
+ * gjenkjenner dobbelttrykk selv (to trykk innen 450 ms og 30 px). Et enkelt trykk
+ * åpner en boble med knappen «Legg inn punkt her».
+ */
+let lastLineTap: { t: number; pt: L.Point } | null = null;
+let linePopupTimer: number | undefined;
+let lastInsertAt = 0;
+function onRouteLineTap(pt: L.Point, ll: L.LatLng): void {
+  // Trykk i enden av ruten (på en flyplass/VOR) skal fortsatt gi info om den.
+  if (nearWaypoint(pt)) {
+    lastLineTap = null;
+    openNearestAt(pt);
+    return;
+  }
+  const now = Date.now();
+  if (lastLineTap && now - lastLineTap.t < 450 && lastLineTap.pt.distanceTo(pt) < 30) {
+    // Andre trykk: dobbelttrykk.
+    clearTimeout(linePopupTimer);
+    lastLineTap = null;
+    map.closePopup();
+    insertRoutePointAt(ll);
+    return;
+  }
+  lastLineTap = { t: now, pt };
+  // Vent litt med boblen, så et raskt andre trykk blir et dobbelttrykk (boblen kan flytte kartet).
+  clearTimeout(linePopupTimer);
+  linePopupTimer = window.setTimeout(() => showLinePopup(ll), 330);
+}
+
+function showLinePopup(ll: L.LatLng): void {
+  L.popup({ ...POPUP_OPTS, minWidth: 200, className: 'info-popup line-popup' })
+    .setLatLng(ll)
+    .setContent(
+      h(
+        'div',
+        { class: 'popup' },
+        h('div', { class: 'p-name' }, 'Rutestreken'),
+        h(
+          'div',
+          { class: 'popup-actions' },
+          h(
+            'button',
+            {
+              class: 'p-primary',
+              onclick: () => {
+                map.closePopup();
+                insertRoutePointAt(ll);
+              },
+            },
+            '＋ Legg inn punkt her',
+          ),
+        ),
+        h('div', { class: 'p-muted' }, 'Dra punktet dit ruten skal gå. Tips: dobbelttrykk på streken gjør det samme.'),
+      ),
+    )
+    .openOn(map);
+}
+
 /** Er trykket nær et eksisterende veipunkt (piksler)? */
 function nearWaypoint(pt: L.Point, px = 18): boolean {
   return state.route.waypoints.some((w) => pt.distanceTo(map.latLngToContainerPoint([w.lat, w.lon])) <= px);
 }
 
 /** Legger inn et brukerpunkt på det legget som er nærmest trykket, akkurat på streken. */
-function insertRoutePointAt(pt: L.Point): void {
+function insertRoutePointAt(ll0: L.LatLng): void {
+  // Både vår dobbelttrykk-gjenkjenning og nettleserens dblclick kan slå til – bare én gang.
+  if (Date.now() - lastInsertAt < 700) return;
+  lastInsertAt = Date.now();
+  clearTimeout(linePopupTimer);
+  // Regn fra kartposisjon (kartet kan ha flyttet seg siden trykket, f.eks. for å vise en boble).
+  const pt = map.latLngToContainerPoint(ll0);
   const wps = state.route.waypoints;
   if (wps.length < 2 || nearWaypoint(pt)) return;
   let best = { i: 1, d: Infinity, p: pt };
