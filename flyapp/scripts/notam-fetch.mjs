@@ -18,14 +18,45 @@ const idents = db.airports.map((a) => a[0]).filter((id) => /^EN[A-Z]{2}$/.test(i
 const locs = [...new Set(['ENOR', 'ENOB', ...idents])];
 
 async function search(designators, offset) {
+  // Samme felt som FAAs eget søkeskjema sender.
   const body = new URLSearchParams({
     searchType: '0',
     designatorsForLocation: designators.join(','),
-    offset: String(offset),
-    notamsOnly: 'false',
+    designatorForAccountable: '',
+    latDegrees: '',
+    latMinutes: '0',
+    latSeconds: '0',
+    longDegrees: '',
+    longMinutes: '0',
+    longSeconds: '0',
     radius: '10',
     sortColumns: '5 false',
     sortDirection: 'true',
+    designatorForNotamNumberSearch: '',
+    notamNumber: '',
+    radiusSearchOnDesignator: 'false',
+    radiusSearchDesignator: '',
+    latitudeDirection: 'N',
+    longitudeDirection: 'W',
+    freeFormText: '',
+    flightPathText: '',
+    flightPathDivertAirfields: '',
+    flightPathBuffer: '4',
+    flightPathIncludeNavaids: 'true',
+    flightPathIncludeArtcc: 'false',
+    flightPathIncludeTfr: 'true',
+    flightPathIncludeRegulatory: 'false',
+    flightPathResultsType: 'All NOTAMs',
+    archiveDate: '',
+    archiveDesignator: '',
+    offset: String(offset),
+    notamsOnly: 'false',
+    filters: '',
+    minRunwayLength: '',
+    minRunwayWidth: '',
+    runwaySurfaceTypes: '',
+    predefinedAbraka: '',
+    predefinedDabra: '',
   });
   for (let attempt = 0; ; attempt++) {
     try {
@@ -45,6 +76,8 @@ for (let i = 0; i < locs.length; i += 15) {
   for (let offset = 0; ; ) {
     const d = await search(batch, offset);
     const list = d.notamList ?? [];
+    if (!notams.size && !list.length && i === 0) console.log('Svar uten NOTAM:', JSON.stringify(d).slice(0, 800));
+    if (list.length && !notams.size) console.log('Eksempel:', JSON.stringify(list[0]).slice(0, 800));
     for (const n of list) {
       const msg = (n.icaoMessage || '').trim();
       if (!msg) continue;
