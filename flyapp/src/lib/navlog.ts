@@ -7,6 +7,8 @@ export interface Waypoint extends LatLon {
   name?: string;
   kind: 'airport' | 'navaid' | 'user';
   elevFt?: number | null;
+  /** Flyhøyde (ft MSL) på legget som ender i dette punktet. Mangler = rutens standardhøyde. */
+  legAltFt?: number | null;
 }
 
 export interface Wind {
@@ -56,6 +58,8 @@ export interface NavlogLeg {
   from: Waypoint;
   to: Waypoint;
   tc: number;
+  /** Flyhøyde på legget (ft MSL). */
+  altFt: number;
   wind: Wind;
   variation: number;
   mc: number;
@@ -84,6 +88,7 @@ export function computeNavlog(wps: Waypoint[], p: NavlogParams): NavlogLeg[] {
     const mid = { lat: (from.lat + to.lat) / 2, lon: (from.lon + to.lon) / 2 };
     const variation = declination(mid, p.date);
     const wind = p.legWinds?.[i - 1] ?? p.wind;
+    const altFt = legAltitude(wps, i, p.altitudeFt);
     const sol = windTriangle(tc, p.tas, wind);
     const eteMin = sol ? (dist / sol.groundSpeed) * 60 : null;
     const fuel = eteMin !== null ? (eteMin / 60) * p.fuelBurn : null;
@@ -94,6 +99,7 @@ export function computeNavlog(wps: Waypoint[], p: NavlogParams): NavlogLeg[] {
       from,
       to,
       tc,
+      altFt,
       wind,
       variation,
       mc: trueToMag(tc, variation),
@@ -111,6 +117,13 @@ export function computeNavlog(wps: Waypoint[], p: NavlogParams): NavlogLeg[] {
   }
   return legs;
 }
+
+/** Høyde for legget som ender i wps[i] (i ≥ 1). */
+export const legAltitude = (wps: Waypoint[], i: number, defaultFt: number): number => wps[i]?.legAltFt ?? defaultFt;
+
+/** Høyde per legg (lengde = antall legg). */
+export const legAltitudes = (wps: Waypoint[], defaultFt: number): number[] =>
+  wps.slice(1).map((_, k) => legAltitude(wps, k + 1, defaultFt));
 
 /**
  * VFR-marsjhøyder etter SERA.5005/appendiks 3 (over 3000 ft AGL):

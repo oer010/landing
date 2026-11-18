@@ -236,3 +236,17 @@ describe('data', () => {
     expect(nearestAirports(db, { lat: 60, lon: 11 }, 1)[0].airport.ident).toBe('ENKJ');
   });
 });
+
+import { legAltitudes } from './navlog';
+describe('høyde per legg', () => {
+  it('bruker legghøyde der den er satt, ellers standard', () => {
+    const wps: Waypoint[] = [
+      { id: 'A', kind: 'user', lat: 60, lon: 10 },
+      { id: 'B', kind: 'user', lat: 60.5, lon: 10.5, legAltFt: 5500 },
+      { id: 'C', kind: 'user', lat: 60.5, lon: 9.5 },
+    ];
+    expect(legAltitudes(wps, 4500)).toEqual([5500, 4500]);
+    const legs = computeNavlog(wps, { tas: 100, wind: { dir: 0, speed: 0 }, fuelBurn: 30, altitudeFt: 4500 });
+    expect(legs.map((l) => l.altFt)).toEqual([5500, 4500]);
+  });
+});

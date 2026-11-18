@@ -157,6 +157,8 @@ export function airspacesAt(db: AirspaceDb, p: LatLon) {
 
 export interface RouteAirspace {
   airspace: AirspaceDb['airspaces'][number];
+  /** Høyden på legget der luftrommet treffes. */
+  altFt: number;
   /** Distanse fra start til første punkt inne i luftrommet (NM). */
   atNm: number;
 }
@@ -165,27 +167,28 @@ export interface RouteAirspace {
  * Luftrom som berøres langs ruten i gitt høyde (ft MSL), i rekkefølge.
  * Ruten samples hver `stepNm`; høydegrensene tolkes som MSL (GND = 0).
  */
-export function airspacesAlongRoute(db: AirspaceDb, wps: LatLon[], altFt: number, stepNm = 0.5): RouteAirspace[] {
-  const hit = new Map<number, number>();
+export function airspacesAlongRoute(db: AirspaceDb, wps: LatLon[], altFt: number | number[], stepNm = 0.5): RouteAirspace[] {
+  const hit = new Map<number, [number, number]>();
   let done = 0;
   for (let i = 1; i < wps.length; i++) {
     const a = wps[i - 1];
     const b = wps[i];
     const d = distanceNm(a, b);
     const brg = bearingTrue(a, b);
+    const alt = Array.isArray(altFt) ? (altFt[i - 1] ?? altFt[altFt.length - 1]) : altFt;
     const n = Math.max(1, Math.ceil(d / stepNm));
     for (let k = 0; k <= n; k++) {
       const along = (d * k) / n;
       const p = k === 0 ? a : k === n ? b : destination(a, brg, along);
       db.airspaces.forEach((as, idx) => {
-        if (hit.has(idx) || altFt < as.lo || altFt >= effectiveHi(as)) return;
-        if (contains(as, p)) hit.set(idx, done + along);
+        if (hit.has(idx) || alt < as.lo || alt >= effectiveHi(as)) return;
+        if (contains(as, p)) hit.set(idx, [done + along, alt]);
       });
     }
     done += d;
   }
   return [...hit]
-    .map(([idx, atNm]) => ({ airspace: db.airspaces[idx], atNm }))
+    .map(([idx, [atNm, alt]]) => ({ airspace: db.airspaces[idx], atNm, altFt: alt }))
     .sort((x, y) => x.atNm - y.atNm);
 }
 

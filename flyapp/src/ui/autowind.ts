@@ -37,6 +37,7 @@ export async function fetchForecastWind(force = false): Promise<void> {
     const legs = computeNavlog(r.waypoints, { tas: ac.tas, wind: { dir: r.windDir, speed: r.windSpeed }, fuelBurn: ac.fuelBurn, altitudeFt: r.altitudeFt, date: dep });
     const reqs = legs.map((l) => ({
       point: midpoint(l.from, l.to),
+      altFt: l.altFt,
       time: new Date(dep.getTime() + Math.max(0, (l.cumMin ?? 0) - (l.eteMin ?? 0) / 2) * 60000),
     }));
     const winds = await fetchLegWinds(reqs, r.altitudeFt);

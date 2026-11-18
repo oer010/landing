@@ -3,7 +3,7 @@ import { fetchForecastWind, windStatus } from '../autowind';
 import { airspaceStale, airspacesAlongRoute, fmtLimits, KIND_ADVICE, KIND_STYLE } from '../../lib/airspace';
 import type { Waypoint, Wind } from '../../lib/navlog';
 import { fmtVar } from '../../lib/mag';
-import { computeNavlog, fmtMin, fuelPlan, suggestVfrAltitude, vfrCruiseAltitudeOk, type NavlogLeg } from '../../lib/navlog';
+import { computeNavlog, fmtMin, fuelPlan, legAltitudes, suggestVfrAltitude, vfrCruiseAltitudeOk, type NavlogLeg } from '../../lib/navlog';
 import { categoryOf, CATEGORY_COLORS, fetchMetars, wxError } from '../../lib/metar';
 import { isNight, sunTimes } from '../../lib/sun';
 import { download, icaoFlightPlan, routeToFpl, routeToGpx } from '../../lib/export';
@@ -127,12 +127,22 @@ export function renderRoute(el: HTMLElement): void {
       h(
         'div',
         { class: 'grid2' },
-        numField('Marsjhøyde', r.altitudeFt, (v) => state.setRoute({ altitudeFt: v }), { step: 500, unit: 'ft' }),
+        numField('Flyhøyde (standard)', r.altitudeFt, (v) => state.setRoute({ altitudeFt: v }), { step: 500, unit: 'ft MSL' }),
         numField('Drivstoff om bord', fuelOnBoard, (v) => state.setRoute({ fuelOnBoard: v }), { unit: ac.fuelUnit }),
         textField('Avgang (lokal tid)', r.departureTime, (v) => state.setRoute({ departureTime: v }), { type: 'datetime-local' }),
         numField('Personer om bord', r.persons, (v) => state.setRoute({ persons: v }), { min: 1, step: 1 }),
       ),
-      h('p', { class: 'muted small' }, `TAS ${ac.tas} kt · forbruk ${ac.fuelBurn} ${ac.fuelUnit}/t (fra flyprofilen)`),
+      h(
+        'div',
+        { class: 'row wrap' },
+        h('button', { onclick: setVfrAltitudes, disabled: legs.length === 0 }, '↕ Sett VFR-høyder per legg'),
+        wps.some((w) => w.legAltFt != null) ? h('button', { onclick: () => state.setWaypoints(wps.map((w) => ({ ...w, legAltFt: null }))) }, 'Alle legg = standard') : null,
+      ),
+      h(
+        'p',
+        { class: 'muted small' },
+        `Standardhøyden gjelder alle legg der du ikke har satt egen høyde i navloggen. Vinden hentes i høyden for hvert legg. TAS ${ac.tas} kt · forbruk ${ac.fuelBurn} ${ac.fuelUnit}/t (fra flyprofilen).`,
+      ),
     ),
     windSection(dep),
   );
@@ -230,7 +240,7 @@ function navlogTable(legs: NavlogLeg[], fuelUnit: string): HTMLElement {
       h(
         'table',
         { class: 'navlog' },
-        h('thead', null, h('tr', null, ['Til', 'Vind', 'Temp', 'TC', 'Var', 'MC', 'WCA', 'MH', 'Dist', 'GS', 'ETE', 'Fuel', 'Σ tid'].map((c) => h('th', null, c)))),
+        h('thead', null, h('tr', null, ['Til', 'Høyde', 'Vind', 'Temp', 'TC', 'Var', 'MC', 'WCA', 'MH', 'Dist', 'GS', 'ETE', 'Fuel', 'Σ tid'].map((c) => h('th', null, c)))),
         h(
           'tbody',
           null,
@@ -239,6 +249,7 @@ function navlogTable(legs: NavlogLeg[], fuelUnit: string): HTMLElement {
               'tr',
               null,
               h('td', { class: 'wp-id' }, l.to.id),
+              h('td', null, altCell(i, l)),
               h('td', { title: windTitle(i), class: 'strong' }, fmtLegWind(i, l.wind)),
               h('td', null, legTemp(i)),
               h('td', null, fmtHdg(l.tc)),
@@ -272,24 +283,25 @@ async function vfrChecks(ul: HTMLElement, legs: NavlogLeg[], dep: Date, extraFue
   const wps = r.waypoints;
 
   // Halvsirkelregelen
-  const bad = legs.filter((l) => !vfrCruiseAltitudeOk(l.mc, r.altitudeFt));
-  if (r.altitudeFt < 3000) ok(`Marsjhøyde ${r.altitudeFt} ft – under 3000 ft gjelder ikke halvsirkelregelen (husk 3000 ft AGL-grensen)`);
+  const high = legs.filter((l) => l.altFt >= 3000);
+  const bad = high.filter((l) => !vfrCruiseAltitudeOk(l.mc, l.altFt));
+  if (!high.length) ok('Alle legg under 3000 ft – halvsirkelregelen gjelder ikke (husk 3000 ft AGL-grensen).');
   else if (bad.length)
-    warn(`Halvsirkelregelen: ${r.altitudeFt} ft passer ikke for legg ${bad.map((l) => `${l.to.id} (MC ${fmtHdg(l.mc)}° → ${suggestVfrAltitude(l.mc, r.altitudeFt)} ft)`).join(', ')}`);
-  else ok(`Marsjhøyde ${r.altitudeFt} ft følger halvsirkelregelen`);
+    warn(`Halvsirkelregelen: ${bad.map((l) => `${l.to.id} i ${l.altFt} ft (MC ${fmtHdg(l.mc)}° → ${suggestVfrAltitude(l.mc, l.altFt)} ft)`).join(', ')}. Trykk «Sett VFR-høyder per legg».`);
+  else ok('Flyhøydene følger halvsirkelregelen på alle legg');
 
   // Luftrom langs ruten i marsjhøyden
   const asDb = getAirspaceDb();
   if (asDb) {
-    const along = airspacesAlongRoute(asDb, wps, r.altitudeFt);
+    const along = airspacesAlongRoute(asDb, wps, legAltitudes(wps, r.altitudeFt));
     const stale = airspaceStale(asDb.airac, state.db.aipEdition);
-    if (!along.length) ok(`Ingen kontrollert/spesielt luftrom langs ruten i ${r.altitudeFt} ft (utenom start/landing).`);
-    for (const { airspace: a, atNm } of along) {
+    if (!along.length) ok('Ingen kontrollert/spesielt luftrom langs ruten i flyhøydene (utenom start/landing).');
+    for (const { airspace: a, atNm, altFt } of along) {
       const li = h(
         'li',
         { class: ['SPORT', 'TIA'].includes(a.kind) ? 'ok' : 'warn' },
         h('span', { class: 'as-dot', style: { background: KIND_STYLE[a.kind].color } }),
-        ` ${atNm.toFixed(0)} NM: `,
+        ` ${atNm.toFixed(0)} NM (${altFt} ft): `,
         h('strong', null, a.n),
         ` (${a.c.length === 1 ? `klasse ${a.c}, ` : ''}${fmtLimits(a)}) – ${KIND_ADVICE[a.kind]}`,
         a.f ? ` · ${a.f.replace(/\s*MHZ/i, ' MHz')}` : '',
@@ -451,12 +463,12 @@ function printNavlog(legs: NavlogLeg[]): void {
     h(
       'p',
       null,
-      `${ac.registration} (${ac.icaoType}) · TAS ${ac.tas} kt · ${r.altitudeFt} ft · vind ${activeLegWinds() ? `prognose (Open-Meteo, hentet ${fmt.time(new Date(r.forecast!.fetchedAt))})` : `${String(r.windDir).padStart(3, '0')}/${r.windSpeed} kt`} · ${fmt.date(new Date())}`,
+      `${ac.registration} (${ac.icaoType}) · TAS ${ac.tas} kt · standardhøyde ${r.altitudeFt} ft · vind ${activeLegWinds() ? `prognose (Open-Meteo, hentet ${fmt.time(new Date(r.forecast!.fetchedAt))})` : `${String(r.windDir).padStart(3, '0')}/${r.windSpeed} kt`} · ${fmt.date(new Date())}`,
     ),
     h(
       'table',
       null,
-      h('thead', null, h('tr', null, ['Fra', 'Til', 'Vind', 'MC', 'MH', 'Dist', 'GS', 'ETE', 'ETA', 'ATA', 'Fuel', 'Frekv./notat'].map((c) => h('th', null, c)))),
+      h('thead', null, h('tr', null, ['Fra', 'Til', 'Høyde', 'Vind', 'MC', 'MH', 'Dist', 'GS', 'ETE', 'ETA', 'ATA', 'Fuel', 'Frekv./notat'].map((c) => h('th', null, c)))),
       h(
         'tbody',
         null,
@@ -466,6 +478,7 @@ function printNavlog(legs: NavlogLeg[]): void {
             null,
             h('td', null, l.from.id),
             h('td', null, l.to.id),
+            h('td', null, String(l.altFt)),
             h('td', null, fmtLegWind(i, l.wind)),
             h('td', null, fmtHdg(l.mc)),
             h('td', null, l.mh === null ? '' : fmtHdg(l.mh)),
@@ -528,7 +541,7 @@ function windSection(dep: Date): HTMLElement {
       ? h(
           'p',
           { class: 'small' },
-          `✓ Prognosevind per legg i ${r.altitudeFt} ft, for avgang ${fmt.time(dep)} (hentet ${fmt.time(new Date(r.forecast!.fetchedAt))}).`,
+          `✓ Prognosevind per legg i flyhøyden for hvert legg, for avgang ${fmt.time(dep)} (hentet ${fmt.time(new Date(r.forecast!.fetchedAt))}).`,
           temps.length ? ` Temperatur i høyden ${fmtRange(temps)} °C.` : '',
         )
       : loading
@@ -661,4 +674,42 @@ function airportPicker(label: string, current: Waypoint | null, onPick: (w: Wayp
     }
   });
   return h('label', { class: 'field picker' }, h('span', null, label), input, list);
+}
+
+// ---------- Høyde per legg ----------
+
+/** Redigerbar høyde for et legg; rød om den bryter halvsirkelregelen. */
+function altCell(i: number, l: NavlogLeg): HTMLElement {
+  const wps = state.route.waypoints;
+  const custom = wps[i + 1]?.legAltFt != null;
+  const wrong = l.altFt >= 3000 && !vfrCruiseAltitudeOk(l.mc, l.altFt);
+  return h('input', {
+    type: 'number',
+    inputmode: 'numeric',
+    step: 500,
+    min: 0,
+    class: `alt-input${custom ? ' custom' : ''}${wrong ? ' wrong' : ''}`,
+    value: l.altFt,
+    title: wrong ? `Halvsirkelregelen: bruk ${suggestVfrAltitude(l.mc, l.altFt)} ft (MC ${fmtHdg(l.mc)}°)` : custom ? 'Egen høyde for dette legget' : 'Standardhøyde',
+    onchange: (e: Event) => {
+      const v = parseInt((e.target as HTMLInputElement).value, 10);
+      const next = [...state.route.waypoints];
+      next[i + 1] = { ...next[i + 1], legAltFt: Number.isFinite(v) && v !== state.route.altitudeFt ? v : null };
+      state.setWaypoints(next);
+    },
+  });
+}
+
+/** Gir hvert legg nærmeste korrekte VFR-høyde (halvsirkelregelen) på eller over standardhøyden. */
+function setVfrAltitudes(): void {
+  const r = state.route;
+  const legs = computeNavlog(r.waypoints, { tas: state.currentAircraft.tas, wind: { dir: 0, speed: 0 }, fuelBurn: 0, altitudeFt: r.altitudeFt });
+  const base = Math.max(3500, r.altitudeFt);
+  const next = r.waypoints.map((w, i) => {
+    if (i === 0) return w;
+    const alt = suggestVfrAltitude(legs[i - 1].mc, base - 500);
+    return { ...w, legAltFt: alt === r.altitudeFt ? null : alt };
+  });
+  state.setWaypoints(next);
+  toast('VFR-høyder satt per legg – vinden hentes for de nye høydene');
 }

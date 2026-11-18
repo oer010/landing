@@ -40,7 +40,7 @@ export interface RouteState {
 
 /** Endres når rute, høyde eller avgangstid endres (da må vinden hentes på nytt). */
 export const forecastKey = (r: RouteState): string =>
-  JSON.stringify([r.waypoints.map((w) => [w.lat.toFixed(3), w.lon.toFixed(3)]), r.altitudeFt, r.departureTime]);
+  JSON.stringify([r.waypoints.map((w) => [w.lat.toFixed(3), w.lon.toFixed(3), w.legAltFt ?? null]), r.altitudeFt, r.departureTime]);
 
 /** Prognosevind for gjeldende rute, eller undefined om den mangler/er utdatert. */
 export function activeLegWinds(r: RouteState = state.route): (WindAloft | null)[] | undefined {

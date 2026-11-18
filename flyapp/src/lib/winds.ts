@@ -109,6 +109,8 @@ export function windAt(pt: OpenMeteoPoint, t: Date, altFt: number): WindAloft | 
 export interface LegWindRequest {
   point: LatLon;
   time: Date;
+  /** Høyde for dette legget (ft MSL); ellers felles høyde. */
+  altFt?: number;
 }
 
 /** Henter vind for hvert legg (ett kall for alle punktene). */
@@ -122,5 +124,5 @@ export async function fetchLegWinds(reqs: LegWindRequest[], altFt: number, fetch
   if (!res.ok) throw new Error(`Prognosetjenesten svarte ${res.status}`);
   const body = (await res.json()) as OpenMeteoPoint | OpenMeteoPoint[];
   const pts = Array.isArray(body) ? body : [body];
-  return reqs.map((r, i) => (pts[i] ? windAt(pts[i], r.time, altFt) : null));
+  return reqs.map((r, i) => (pts[i] ? windAt(pts[i], r.time, r.altFt ?? altFt) : null));
 }

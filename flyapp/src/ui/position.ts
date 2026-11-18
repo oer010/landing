@@ -1,7 +1,7 @@
 // Posisjon fra GPS eller simulator, sekvensering av veipunkter og sporlogging.
 
 import { bearingTrue, destination, distanceNm, type LatLon } from '../lib/geo';
-import { windTriangle, type Waypoint } from '../lib/navlog';
+import { legAltitude, windTriangle, type Waypoint } from '../lib/navlog';
 import { nearestAirports } from '../lib/data';
 import { uid, type Track } from '../lib/store';
 import { Geolocation } from '@capacitor/geolocation';
@@ -221,7 +221,6 @@ export function startSim(multiplier = 4): void {
   state.activeIndex = 1;
   lastFix = null;
   let pos: LatLon = { lat: wps[0].lat, lon: wps[0].lon };
-  const alt = state.route.altitudeFt;
   const ac = state.currentAircraft;
   const step = 1; // sekunder sanntid
   const tick = () => {
@@ -235,7 +234,7 @@ export function startSim(multiplier = 4): void {
     const remaining = distanceNm(pos, leg.to);
     const last = state.activeIndex >= wps.length - 1 && !state.directTo;
     pos = remaining <= distStep ? { lat: leg.to.lat, lon: leg.to.lon } : destination(pos, tc, distStep);
-    setPosition({ ...pos, t: Date.now(), gsKt: gs, trkTrue: tc, altFt: alt, source: 'sim' });
+    setPosition({ ...pos, t: Date.now(), gsKt: gs, trkTrue: tc, altFt: legAltitude(state.route.waypoints, state.activeIndex, state.route.altitudeFt), source: 'sim' });
     if (last && remaining <= distStep) {
       toast('Simulering: fremme');
       stopSim();

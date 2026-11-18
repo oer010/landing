@@ -542,7 +542,7 @@ function renderRoute(): void {
       const ll = m.getLatLng();
       const snapped = nearestSnap(ll) ?? { ...w, kind: 'user', id: w.kind === 'user' ? w.id : `BRK${i}`, name: undefined, lat: ll.lat, lon: ll.lng };
       const next = [...state.route.waypoints];
-      next[i] = snapped;
+      next[i] = { ...snapped, legAltFt: w.legAltFt ?? null };
       state.setWaypoints(next);
     });
     m.bindPopup(() =>
@@ -864,7 +864,8 @@ function insertRoutePointAt(ll0: L.LatLng): void {
   }
   const ll = map.containerPointToLatLng(best.p);
   const next = [...wps];
-  next.splice(best.i, 0, userWaypoint({ lat: ll.lat, lon: ll.lng }));
+  // Det nye punktet arver høyden til legget som deles.
+  next.splice(best.i, 0, { ...userWaypoint({ lat: ll.lat, lon: ll.lng }), legAltFt: wps[best.i].legAltFt ?? null });
   justInserted = best.i;
   state.setWaypoints(next);
   navigator.vibrate?.(15);
