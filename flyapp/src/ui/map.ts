@@ -129,7 +129,7 @@ export function initMap(el: HTMLElement): L.Map {
   });
   map.on('click', (e: L.LeafletMouseEvent) => {
     const p = { lat: e.latlng.lat, lon: e.latlng.lng };
-    if (editMode) addRoutePoint(userWaypoint(p));
+    if (editMode) addRoutePoint(nearestSnap(e.latlng) ?? userWaypoint(p));
     // Fingertrykk som bommer litt: åpne nærmeste flyplass/VOR/NDB innen ~en fingerbredde.
     else if (!openNearestAt(e.containerPoint)) showAirspacesAt(p);
   });
@@ -517,7 +517,21 @@ function nearestSnap(p: L.LatLng): Waypoint | null {
       const d = pt.distanceTo(map.latLngToContainerPoint([n.lat, n.lon]));
       if (d < 18 && (!best || d < best.d)) best = { w: navaidToWaypoint(n), d };
     }
+  // VFR-rapporteringspunkter og venteområder, når laget vises.
+  if (vfr && state.settings.showVfrPoints && map.getZoom() >= 8)
+    for (const v of vfr.points) {
+      if (!b.contains([v.lat, v.lon])) continue;
+      const d = pt.distanceTo(map.latLngToContainerPoint([v.lat, v.lon]));
+      // Litt foran flyplasser/navaids ved lik avstand – de ligger ofte tett.
+      if (d < 20 && (!best || d < best.d - 2)) best = { w: vfrPointToWaypoint(v), d };
+    }
   return best?.w ?? null;
+}
+
+/** VFR-rapporteringspunkt som rutepunkt (beholder AIP-navnet). */
+export function vfrPointToWaypoint(v: VfrPoint): Waypoint {
+  const kind = v.hold ? 'venteområde' : v.c === 1 ? 'obligatorisk VFR-punkt' : 'VFR-punkt';
+  return { id: v.n, name: `${kind} ${v.ad.join('/')}`, kind: 'user', lat: v.lat, lon: v.lon, manualName: true, needsName: false };
 }
 
 const wpIcon = (w: Waypoint, active: boolean, fresh = false) =>
@@ -867,6 +881,11 @@ function renderVfrRoutes(): void {
   if (!vfr || !state.settings.showVfrCharts) return;
   for (const r of vfr.routes) {
     const ll = r.pts.map(([a, b]) => [a, b] as [number, number]);
+    // Linjene på AIP-kartet stopper ved pilspissen like før punktet – la dem gå helt inn til punktet.
+    const a0 = nearestVfrPoint(ll[0][0], ll[0][1], r.ad);
+    const a1 = nearestVfrPoint(ll[ll.length - 1][0], ll[ll.length - 1][1], r.ad);
+    if (a0) ll[0] = [a0.lat, a0.lon];
+    if (a1) ll[ll.length - 1] = [a1.lat, a1.lon];
     L.polyline(ll, { color: '#fff', weight: 6, opacity: 0.85, interactive: false }).addTo(vfrRouteLayer);
     L.polyline(ll, { color: '#0f172a', weight: 2.6, opacity: 0.95, interactive: false }).addTo(vfrRouteLayer);
     // Bred, usynlig treffsone for fingeren.
@@ -874,8 +893,11 @@ function renderVfrRoutes(): void {
       .bindPopup(() => vfrRoutePopup(r), POPUP_OPTS)
       .addTo(vfrRouteLayer);
     // Pilspisser i endene som på AIP-kartet.
-    const arrow = (tip: [number, number], from: [number, number]) => {
-      const brg = bearingTrue({ lat: from[0], lon: from[1] }, { lat: tip[0], lon: tip[1] });
+    const arrow = (end: [number, number], from: [number, number]) => {
+      const brg = bearingTrue({ lat: from[0], lon: from[1] }, { lat: end[0], lon: end[1] });
+      // Pilspissen litt før punktet, så den ikke dekker trekanten.
+      const back = destination({ lat: end[0], lon: end[1] }, (brg + 180) % 360, 0.35);
+      const tip: [number, number] = [back.lat, back.lon];
       L.marker(tip, {
         icon: L.divIcon({ className: 'vfr-arrow', html: `<svg viewBox="0 0 12 12" width="12" height="12" style="transform:rotate(${brg}deg)"><polygon points="6,0 11,11 6,8 1,11" fill="#0f172a" stroke="#fff" stroke-width="1"/></svg>`, iconSize: [12, 12], iconAnchor: [6, 6] }),
         interactive: false,
@@ -893,7 +915,7 @@ function vfrRoutePopup(r: VfrRoute): HTMLElement {
   const nm = (p: VfrPoint | null) => p?.n ?? 'punkt';
   const dir = r.arrowStart && r.arrowEnd ? '⇄' : r.arrowEnd ? '→' : r.arrowStart ? '←' : '–';
   const endAlts = [a, b].filter((p): p is VfrPoint => !!p?.alt).map((p) => `${p.n}: ${fmtAlt(p.alt)}`);
-  const toWp = (p: VfrPoint): Waypoint => ({ id: p.n, name: `VFR-punkt ${p.ad.join('/')}`, kind: 'user', lat: p.lat, lon: p.lon, manualName: true });
+  const toWp = vfrPointToWaypoint;
   return h(
     'div',
     { class: 'popup' },
@@ -923,7 +945,7 @@ function vfrRoutePopup(r: VfrRoute): HTMLElement {
 }
 
 function vfrPointPopup(p: VfrPoint): HTMLElement {
-  const w: Waypoint = { id: p.n, name: `VFR-punkt ${p.ad.join('/')}`, kind: 'user', lat: p.lat, lon: p.lon, manualName: true };
+  const w = vfrPointToWaypoint(p);
   const me = fromMe(p);
   return h(
     'div',
