@@ -6,27 +6,46 @@
 import { writeFile } from 'node:fs/promises';
 
 const out = process.argv[2] ?? 'obstacles.json';
-const SERVERS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter'];
-const Q = `[out:json][timeout:300];
-area["ISO3166-1"="NO"][admin_level=2]->.no;
+const SERVERS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+];
+// Norge delt i mindre bokser (sør, vest, øst, midt, nord), så hver spørring blir lett.
+const BOXES = [
+  [57.9, 4.0, 60.0, 8.5],
+  [57.9, 8.5, 60.0, 12.6],
+  [60.0, 4.0, 62.5, 8.5],
+  [60.0, 8.5, 62.5, 12.9],
+  [62.5, 4.5, 65.0, 14.5],
+  [65.0, 10.0, 68.0, 18.5],
+  [68.0, 12.0, 71.3, 31.5],
+];
+const query = (b) => `[out:json][timeout:180][bbox:${b.join(',')}];
 (
-  node(area.no)["man_made"~"^(mast|tower|communications_tower|chimney|crane|flagpole)$"]["height"];
-  node(area.no)["power"="generator"]["generator:source"="wind"];
-  node(area.no)["aeroway:light"="obstacle"];
-  node(area.no)["power"="tower"]["height"];
+  node["man_made"~"^(mast|tower|communications_tower|chimney|crane|flagpole)$"]["height"];
+  node["power"="generator"]["generator:source"="wind"];
+  node["aeroway:light"="obstacle"];
+  node["power"="tower"]["height"];
 );
 out qt;`;
 
-async function query() {
-  for (const url of SERVERS)
-    for (let attempt = 0; attempt < 3; attempt++) {
+async function run(q) {
+  for (let attempt = 0; attempt < 3; attempt++)
+    for (const url of SERVERS) {
       try {
-        const r = await fetch(url, { method: 'POST', body: new URLSearchParams({ data: Q }), headers: { 'user-agent': 'vfr-flyapp-obstacles/1.0 (github.com/oer010/landing)' } });
+        const ctl = new AbortController();
+        const t = setTimeout(() => ctl.abort(), 200000);
+        const r = await fetch(url, { method: 'POST', body: new URLSearchParams({ data: q }), signal: ctl.signal, headers: { 'user-agent': 'vfr-flyapp-obstacles/1.0 (github.com/oer010/landing)' } });
+        clearTimeout(t);
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
-        return await r.json();
+        const d = await r.json();
+        if (d.remark && /runtime error|timed out/i.test(d.remark)) throw new Error(d.remark);
+        return d;
       } catch (e) {
         console.log(`${url}: ${e.message}`);
-        await new Promise((res) => setTimeout(res, 10000 * (attempt + 1)));
+        await new Promise((res) => setTimeout(res, 5000 * (attempt + 1)));
       }
     }
   throw new Error('Overpass svarte ikke');
@@ -37,10 +56,18 @@ const num = (v) => {
   return Number.isFinite(n) ? n : null;
 };
 
-const d = await query();
+const d = { elements: [] };
+for (const b of BOXES) {
+  const part = await run(query(b));
+  console.log(`${b.join(',')}: ${part.elements?.length ?? 0}`);
+  d.elements.push(...(part.elements ?? []));
+}
 const TYPE = { mast: 'M', communications_tower: 'M', tower: 'T', chimney: 'C', crane: 'K', flagpole: 'M' };
 const rows = [];
+const seen = new Set();
 for (const e of d.elements ?? []) {
+  if (seen.has(e.id)) continue;
+  seen.add(e.id);
   const t = e.tags ?? {};
   const wind = t['generator:source'] === 'wind';
   const h = num(t.height) ?? (wind ? 150 : null);
