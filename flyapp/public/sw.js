@@ -1,6 +1,6 @@
 // Service worker: appen og flyplassdata virker offline, og kartfliser du har
 // sett, caches slik at de også er tilgjengelige uten dekning i lufta.
-const APP_CACHE = 'vfr-app-v24';
+const APP_CACHE = 'vfr-app-v25';
 const TILE_CACHE = 'vfr-tiles-v1';
 const OFFLINE_CACHE = 'vfr-offline-v1';
 const MAX_TILES = 6000;
@@ -11,7 +11,7 @@ self.addEventListener('install', (e) => {
   e.waitUntil(
     caches
       .open(APP_CACHE)
-      .then((c) => c.addAll([...self.__ASSETS, './', './index.html', './data/airports.json', './data/airspace.json', './data/aip-freq.json', './data/vfr.json', './manifest.webmanifest', './icon.svg', './apple-touch-icon.png']))
+      .then((c) => c.addAll([...self.__ASSETS, './', './index.html', './data/airports.json', './data/airspace.json', './data/aip-freq.json', './data/vfr.json', './data/fir.json', './manifest.webmanifest', './icon.svg', './apple-touch-icon.png']))
       .then(() => self.skipWaiting()),
   );
 });

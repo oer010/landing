@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "VFR-flyapp: kart, ruteplanlegging, vær, masse og balanse og E6B",
   "scripts": {
-    "data": "node scripts/build-data.mjs",
+    "data": "node scripts/build-data.mjs && node scripts/fir.mjs",
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
@@ -27,9 +27,11 @@
   "devDependencies": {
     "@capacitor/cli": "^8.6.2",
     "@types/leaflet": "^1.9.22",
+    "topojson-client": "^3.1.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0"
+    "vitest": "^5.1.0",
+    "world-atlas": "^2.0.2"
   },
   "private": true,
   "type": "module"

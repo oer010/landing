@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeWarnings, parseIga, parseWarnings } from './metwx';
+import { activeWarnings, clipPolygon, parseIga, parseWarnings, warningAreas } from './metwx';
 
 const RAW = `ZCZC
 WANO31 ENMI 181634
@@ -32,5 +32,27 @@ describe('MET-varsler', () => {
     expect(f.title).toMatch(/^181500-182400 UTC/);
     expect(f.text).toContain('VIS');
     expect(f.issued).toBe('181500');
+  });
+  it('hele FIR og halvplan klippes fra FIR-området', () => {
+    const raw = `ZCZC
+WSNO31 ENMI 191000
+ENOR SIGMET A01 VALID 191000/191400 ENMI-
+ENOR POLARIS FIR SEV TURB FCST N OF N6800 AND E OF E01500 SFC/FL150 STNR NC=
+ZCZC
+WSNO31 ENMI 191001
+ENOR SIGMET A02 VALID 191000/191400 ENMI-
+ENOR POLARIS FIR MOD MTW FCST ENTIRE FIR FL050/FL150 STNR NC=
+`;
+    const [a, b] = parseWarnings(raw, new Date('2026-11-19T11:00:00Z'));
+    expect(a.phenomenon).toBe('SEV TURB');
+    expect(a.firArea?.cuts).toEqual([{ dir: 'N', val: 68 }, { dir: 'E', val: 15 }]);
+    expect(b.firArea?.entire).toBe(true);
+    expect(b.phenomenon).toBe('MOD MTW');
+    const fir: [number, number][][] = [[[60, 5], [72, 5], [72, 30], [60, 30]]];
+    const area = warningAreas(a, fir)[0];
+    expect(Math.min(...area.map((p) => p[0]))).toBeCloseTo(68, 6);
+    expect(Math.min(...area.map((p) => p[1]))).toBeCloseTo(15, 6);
+    expect(warningAreas(b, fir)[0]).toHaveLength(4);
+    expect(clipPolygon([[60, 5], [72, 5], [72, 30], [60, 30]], { dir: 'S', val: 65 }).every((p) => p[0] <= 65)).toBe(true);
   });
 });

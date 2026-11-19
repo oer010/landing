@@ -70,6 +70,10 @@ export interface MetWarning {
   lowerFt: number | null;
   upperFt: number | null;
   cancelled: boolean;
+  /** Fenomen, f.eks. «MOD ICE», «SEV TURB», «EMBD TS». */
+  phenomenon: string;
+  /** Hele FIR-en, eventuelt avgrenset av halvplan («N OF N6800»). */
+  firArea: { entire: boolean; cuts: { dir: 'N' | 'S' | 'E' | 'W'; val: number }[] } | null;
 }
 
 function ddhhmm(s: string | undefined, now: Date): Date | null {
@@ -120,9 +124,54 @@ export function parseWarnings(raw: string, now = new Date()): MetWarning[] {
       lowerFt: lv && lv.length > 2 ? lim(lv[1]) : null,
       upperFt: lv ? lim(lv[lv.length > 2 ? 2 : 1]) : null,
       cancelled: /\bCNL\b/.test(text),
+      phenomenon: phenomenonOf(text),
+      firArea: polygons.length ? null : firAreaOf(text),
     });
   }
   return out;
+}
+
+const PHEN = /\b((?:ISOL |OCNL |FRQ |EMBD |OBSC |SQL )?(?:TSGR|TS)|(?:SEV |MOD )(?:ICE|TURB|MTW)(?: \(FZRA\))?|RDOACT CLD|VA CLD|HVY (?:DS|SS)|SFC (?:VIS|WIND)|(?:BKN|OVC) CLD|MT OBSC|ISOL CB|OCNL CB|FRQ CB)\b/;
+
+export function phenomenonOf(text: string): string {
+  return text.match(PHEN)?.[1] ?? '';
+}
+
+/** «ENTIRE FIR», «N OF N6800», «S OF N6100 AND E OF E01200» → område som del av FIR-en. */
+export function firAreaOf(text: string): MetWarning['firArea'] {
+  const cuts: { dir: 'N' | 'S' | 'E' | 'W'; val: number }[] = [];
+  for (const m of text.matchAll(/\b([NSEW]) OF ([NS])(\d{2})(\d{2})?\b(?! [EW]\d)|\b([EW]) OF ([EW])(\d{3})(\d{2})?\b/g)) {
+    if (m[1]) cuts.push({ dir: m[1] as 'N' | 'S', val: (+m[3] + +(m[4] ?? 0) / 60) * (m[2] === 'S' ? -1 : 1) });
+    else cuts.push({ dir: m[5] as 'E' | 'W', val: (+m[7] + +(m[8] ?? 0) / 60) * (m[6] === 'W' ? -1 : 1) });
+  }
+  const entire = /\bENTIRE FIR\b/.test(text);
+  return entire || cuts.length ? { entire, cuts } : null;
+}
+
+/** Klipp et polygon ([lat, lon]) med halvplan (Sutherland–Hodgman). */
+export function clipPolygon(poly: [number, number][], cut: { dir: 'N' | 'S' | 'E' | 'W'; val: number }): [number, number][] {
+  const idx = cut.dir === 'N' || cut.dir === 'S' ? 0 : 1;
+  const keep = (p: [number, number]) => (cut.dir === 'N' || cut.dir === 'E' ? p[idx] >= cut.val : p[idx] <= cut.val);
+  const out: [number, number][] = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i];
+    const b = poly[(i + 1) % poly.length];
+    const ka = keep(a);
+    const kb = keep(b);
+    if (ka) out.push(a);
+    if (ka !== kb) {
+      const t = (cut.val - a[idx]) / (b[idx] - a[idx]);
+      out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+    }
+  }
+  return out;
+}
+
+/** Områdene en melding dekker: egne polygoner, eller FIR-en (eventuelt klippet). */
+export function warningAreas(w: MetWarning, fir: [number, number][][]): [number, number][][] {
+  if (w.polygons.length) return w.polygons;
+  if (!w.firArea || !fir.length) return [];
+  return fir.map((p) => w.firArea!.cuts.reduce((acc, c) => (acc.length ? clipPolygon(acc, c) : acc), p)).filter((p) => p.length >= 3);
 }
 
 export async function fetchWarnings(fetcher: typeof fetch = fetch): Promise<MetWarning[]> {
