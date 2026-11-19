@@ -40,6 +40,11 @@ export function unplacedNotams(): Notam[] {
   return relevantNotams().filter((n) => !notamShapes(n).length && !(n.locs.length === 1 && /^EN[A-Z]{2}$/.test(n.locs[0]) && !['ENOR', 'ENOB'].includes(n.locs[0])));
 }
 
+/** Relevante NOTAM for én flyplass (A-feltet). */
+export function notamsForAirport(ident: string): Notam[] {
+  return relevantNotams().filter((n) => n.locs.includes(ident));
+}
+
 export function initNotamLayer(m: L.Map, opts: L.PopupOptions): void {
   map = m;
   popupOpts = opts;
@@ -109,10 +114,11 @@ export function renderNotams(): void {
     L.marker([lat, lon], {
       icon: L.divIcon({
         className: 'notam-ad',
-        html: `<span class="${active ? '' : 'upc'}">N${list.length}</span>`,
-        iconSize: [30, 18],
+        // Stor, usynlig trykkflate rundt merket (fingre bommer lett på små merker).
+        html: `<span class="${active ? '' : 'upc'}">NOTAM ${list.length}</span>`,
+        iconSize: [64, 40],
         // Over og til høyre for flyplass-symbolet, så det ikke dekker det.
-        iconAnchor: [-6, 24],
+        iconAnchor: [-2, 44],
       }),
       keyboard: false,
       zIndexOffset: 500,

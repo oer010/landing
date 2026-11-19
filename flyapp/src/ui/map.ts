@@ -17,7 +17,7 @@ import { badge, clear, fmt, h, toast } from './dom';
 import { activeLegWinds, airportToWaypoint, navaidToWaypoint, state, userWaypoint } from './state';
 import { activeLeg, directTo } from './position';
 import { renameWaypoint } from './naming';
-import { initNotamLayer, renderNotams } from './notamlayer';
+import { initNotamLayer, notamPopup, notamsForAirport, renderNotams } from './notamlayer';
 import { initObstacleLayer } from './obstaclelayer';
 import { initWxLayer } from './wxlayer';
 
@@ -350,6 +350,7 @@ export function airportPopup(a: Airport): HTMLElement {
       ),
     ),
     wx,
+    airportNotams(a.ident),
     vfrChartLinks(a.ident),
     h(
       'div',
@@ -358,6 +359,18 @@ export function airportPopup(a: Airport): HTMLElement {
       h('button', { onclick: () => (map.closePopup(), directTo(airportToWaypoint(a))) }, 'Direkte →'),
       h('button', { onclick: () => (map.closePopup(), addRoutePoint(airportToWaypoint(a))) }, '+ Rute'),
     ),
+  );
+}
+
+/** NOTAM for flyplassen i boblen (også tilgjengelig ved å trykke på flyplassen). */
+function airportNotams(ident: string): HTMLElement | null {
+  const list = state.settings.showNotams ? notamsForAirport(ident) : [];
+  if (!list.length) return null;
+  return h(
+    'details',
+    { class: 'p-notams' },
+    h('summary', null, `⚠ ${list.length} NOTAM for ${ident}`),
+    notamPopup(list),
   );
 }
 
