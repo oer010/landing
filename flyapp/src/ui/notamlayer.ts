@@ -37,7 +37,7 @@ export function relevantNotams(now = new Date()): Notam[] {
 
 /** Relevante NOTAM som ikke kan plasseres i kartet (store områder uten avgrensning). */
 export function unplacedNotams(): Notam[] {
-  return relevantNotams().filter((n) => !notamShapes(n).length && !(n.locs.length === 1 && /^EN[A-Z]{2}$/.test(n.locs[0]) && !['ENOR', 'ENOB'].includes(n.locs[0])));
+  return relevantNotams().filter((n) => !notamShapes(n).length && n.qLat === undefined && !(n.locs.length === 1 && /^EN[A-Z]{2}$/.test(n.locs[0]) && !['ENOR', 'ENOB'].includes(n.locs[0])));
 }
 
 /** Relevante NOTAM for én flyplass (A-feltet). */
@@ -60,6 +60,7 @@ export function initNotamLayer(m: L.Map, opts: L.PopupOptions): void {
   setInterval(() => void refresh(true), 15 * 60e3);
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && void refresh());
   state.on('settings', renderNotams);
+  map.on('zoomend', renderNotams);
 }
 
 export function renderNotams(): void {
@@ -68,6 +69,7 @@ export function renderNotams(): void {
   if (!state.settings.showNotams || !data) return;
   const now = new Date();
   const byAd = new Map<string, Notam[]>();
+  const pins = new Map<string, { pos: [number, number]; list: Notam[] }>();
   for (const n of relevantNotams(now)) {
     const kind = notamKind(n);
     const shapes = notamShapes(n);
@@ -88,44 +90,91 @@ export function renderNotams(): void {
       dashArray: upcoming ? '6 5' : undefined,
       bubblingMouseEvents: false,
     };
+    const open = () => notamPopup([n]);
+    const opts = { ...popupOpts, maxHeight: 360 } as L.PopupOptions;
+    let anchor: [number, number] | null = null;
     for (const g of shapes) {
       let l: L.Layer;
-      if (g.type === 'polygon') l = L.polygon(g.pts, style);
-      else if (g.type === 'circle') l = L.circle([g.lat, g.lon], { ...style, radius: g.rNm * 1852 });
-      else
+      if (g.type === 'polygon') {
+        l = L.polygon(g.pts, style);
+        anchor ??= centroid(g.pts);
+      } else if (g.type === 'circle') {
+        l = L.circle([g.lat, g.lon], { ...style, radius: g.rNm * 1852 });
+        anchor ??= [g.lat, g.lon];
+      } else {
         l = L.marker([g.lat, g.lon], {
           icon: L.divIcon({
             className: 'notam-pt',
             html: `<svg viewBox="0 0 20 20" width="20" height="20"><polygon points="10,1 19,18 1,18" fill="${color}" stroke="#fff" stroke-width="1.5"/><text x="10" y="16" text-anchor="middle" font-size="11" font-weight="700" fill="#fff">!</text></svg>`,
-            iconSize: [20, 20],
-            iconAnchor: [10, 12],
+            iconSize: [36, 36],
+            iconAnchor: [18, 20],
           }),
           keyboard: false,
         });
-      l.bindPopup(() => notamPopup([n]), { ...popupOpts, maxHeight: 360 } as L.PopupOptions).addTo(layer);
+      }
+      l.bindPopup(open, opts).addTo(layer);
+    }
+    // Store områder uten avgrensning: tynn stiplet ring fra Q-linjen + merke i midten.
+    if (!shapes.length && n.qLat !== undefined && n.qLon !== undefined) {
+      if (n.qRadiusNm !== undefined && n.qRadiusNm < 999)
+        L.circle([n.qLat, n.qLon], { color, weight: 1.2, opacity: 0.55, dashArray: '4 6', fill: false, interactive: false, radius: n.qRadiusNm * 1852 }).addTo(layer);
+      anchor = [n.qLat, n.qLon];
+    }
+    // Merke med type og trykkflate for hver NOTAM utenfor flyplassene (punkter har eget symbol).
+    if (anchor && shapes.every((g) => g.type !== 'point')) {
+      const k = `${anchor[0].toFixed(2)},${anchor[1].toFixed(2)}`;
+      const g = pins.get(k) ?? { pos: anchor, list: [] as Notam[] };
+      g.list.push(n);
+      pins.set(k, g);
     }
   }
+  // Merker: NOTAM utenfor flyplassene og flyplass-NOTAM. Merker som ligger tett på skjermen
+  // slås sammen til ett (med antall), så kartet ikke blir fullt når man zoomer ut.
+  type Item = { pos: [number, number]; list: Notam[]; ad?: string };
+  const items: Item[] = [...pins.values()];
   for (const [ad, list] of byAd) {
     const a = state.db.byIdent.get(ad);
     const lat = a?.lat ?? list[0].qLat;
     const lon = a?.lon ?? list[0].qLon;
-    if (lat === undefined || lon === undefined) continue;
+    if (lat !== undefined && lon !== undefined) items.push({ pos: [lat, lon], list, ad });
+  }
+  const R = 72;
+  const clusters: { pt: L.Point; items: Item[] }[] = [];
+  for (const it of items) {
+    const pt = map.latLngToLayerPoint(it.pos);
+    const c = clusters.find((c) => c.pt.distanceTo(pt) < R);
+    if (c) c.items.push(it);
+    else clusters.push({ pt, items: [it] });
+  }
+  for (const c of clusters) {
+    const list = c.items.flatMap((i) => i.list);
+    const one = c.items.length === 1 ? c.items[0] : null;
     const active = list.some((n) => notamStatus(n, now) === 'active');
-    L.marker([lat, lon], {
+    // Farge: restriksjon først, ellers flyplass (lilla) eller typen.
+    const kinds = list.map(notamKind);
+    const color = kinds.includes('restriction') ? KIND.restriction.color : one?.ad ? KIND.aerodrome.color : KIND[kinds[0]].color;
+    const label = one?.ad ? `NOTAM ${list.length}` : `⚠ NOTAM${list.length > 1 ? ` ${list.length}` : ''}`;
+    const pos = one ? one.pos : map.layerPointToLatLng(c.pt);
+    const title = one?.ad ? `${one.ad} ${state.db.byIdent.get(one.ad)?.name ?? ''}` : c.items.length > 1 ? `${list.length} NOTAM i området` : undefined;
+    L.marker(pos, {
       icon: L.divIcon({
-        className: 'notam-ad',
-        // Stor, usynlig trykkflate rundt merket (fingre bommer lett på små merker).
-        html: `<span class="${active ? '' : 'upc'}">NOTAM ${list.length}</span>`,
-        iconSize: [64, 40],
-        // Over og til høyre for flyplass-symbolet, så det ikke dekker det.
-        iconAnchor: [-2, 44],
+        className: one?.ad ? 'notam-ad' : 'notam-pin',
+        html: `<span class="${active ? '' : 'upc'}" style="background:${color}">${label}</span>`,
+        iconSize: one?.ad ? [70, 40] : [86, 38],
+        // Flyplassmerket over og til høyre for flyplass-symbolet.
+        iconAnchor: one?.ad ? [-2, 44] : [43, 19],
       }),
       keyboard: false,
-      zIndexOffset: 500,
+      zIndexOffset: one?.ad ? 500 : 400,
     })
-      .bindPopup(() => notamPopup(list, `${ad} ${a?.name ?? ''}`), { ...popupOpts, maxHeight: 360 } as L.PopupOptions)
+      .bindPopup(() => notamPopup(list, title), { ...popupOpts, maxHeight: 380 } as L.PopupOptions)
       .addTo(layer);
   }
+}
+
+function centroid(pts: [number, number][]): [number, number] {
+  const n = pts.length;
+  return [pts.reduce((a, p) => a + p[0], 0) / n, pts.reduce((a, p) => a + p[1], 0) / n];
 }
 
 function fmtLimit(text: string | undefined, ft: number, lower: boolean): string {

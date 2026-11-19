@@ -167,7 +167,7 @@ function notamStatusText(): string {
   if (!d) return 'NOTAM: ikke hentet ennå';
   const ageMin = Math.round((Date.now() - new Date(d.generated).getTime()) / 60e3);
   const age = ageMin < 90 ? `${ageMin} min` : `${Math.round(ageMin / 60)} t`;
-  return `NOTAM: ${relevantNotams().length} aktive/kommende under FL125 · oppdatert for ${age} siden · rød = restriksjon, oransje = hinder, lilla N = flyplass`;
+  return `NOTAM: ${relevantNotams().length} aktive/kommende under FL125 · oppdatert for ${age} siden · rød = restriksjon, oransje = hinder, gul = luftrom/annet, lilla = flyplass`;
 }
 
 function disclaimer(): void {
