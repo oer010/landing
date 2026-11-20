@@ -472,3 +472,5 @@ tr.warn td { color: #b45309; }
 .tel-ctx { grid-column: 1 / -1; }
 .p-routebar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: -2px 0 8px; padding-bottom: 8px; border-bottom: 1px solid rgb(0 0 0 / 0.12); }
 .p-routeno { flex: 1 0 100%; font: 700 12px system-ui, sans-serif; color: #a21caf; text-transform: uppercase; letter-spacing: 0.04em; }
+.popup .p-routebar button { min-height: 40px; padding: 6px 12px; background: #e2e8f0; color: #0f172a; border: 1px solid #94a3b8; border-radius: 8px; font-weight: 600; }
+.popup .p-routebar button:first-of-type { background: #a21caf; border-color: #a21caf; color: #ffffff; }
