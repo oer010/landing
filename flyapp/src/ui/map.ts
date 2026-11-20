@@ -651,30 +651,46 @@ function renderRoute(): void {
       next[i] = { ...snapped, legAltFt: w.legAltFt ?? null };
       state.setWaypoints(next);
     });
-    m.bindPopup(() =>
+    const remove = () => {
+      map.closePopup();
+      state.setWaypoints(state.route.waypoints.filter((_, j) => j !== i));
+    };
+    const routeBar = () =>
       h(
         'div',
-        { class: 'popup' },
-        h('div', { class: 'p-title' }, `${i + 1}. ${w.id}`),
-        w.name ? h('div', { class: 'muted' }, w.name) : null,
-        h('div', { class: 'muted small' }, formatLatLon(w)),
-        w.kind === 'user' ? renameBox(i, w) : null,
-        h(
+        { class: 'p-routebar' },
+        h('span', { class: 'p-routeno' }, `Rutepunkt ${i + 1} av ${wps.length}`),
+        h('button', { onclick: () => (map.closePopup(), directTo(w)) }, 'Direkte →'),
+        h('button', { onclick: remove }, 'Fjern fra rute'),
+      );
+    m.bindPopup(
+      () => {
+        // Flyplass/navaid i ruten: vis full info (METAR, frekvenser, NOTAM, Mer info) + rutevalg.
+        const ap = w.kind === 'airport' ? state.db.byIdent.get(w.id) : undefined;
+        const nav = w.kind === 'navaid' ? state.db.navaidsByIdent.get(w.id)?.find((n) => Math.abs(n.lat - w.lat) < 0.05 && Math.abs(n.lon - w.lon) < 0.05) : undefined;
+        if (ap || nav) {
+          const el = ap ? airportPopup(ap) : navaidPopup(nav!);
+          // Fjern «+ Rute» og «Direkte →» fra den vanlige boblen – rutevalgene står øverst.
+          el.querySelectorAll('.popup-actions button').forEach((b) => /\+ Rute|Direkte/.test(b.textContent ?? '') && b.remove());
+          el.prepend(routeBar());
+          return el;
+        }
+        return h(
           'div',
-          { class: 'popup-actions' },
-          h('button', { onclick: () => (map.closePopup(), directTo(w)) }, 'Direkte →'),
+          { class: 'popup' },
+          h('div', { class: 'p-title' }, `${i + 1}. ${w.id}`),
+          w.name ? h('div', { class: 'muted' }, w.name) : null,
+          h('div', { class: 'muted small' }, formatLatLon(w)),
+          w.kind === 'user' ? renameBox(i, w) : null,
           h(
-            'button',
-            {
-              onclick: () => {
-                map.closePopup();
-                state.setWaypoints(state.route.waypoints.filter((_, j) => j !== i));
-              },
-            },
-            'Fjern',
+            'div',
+            { class: 'popup-actions' },
+            h('button', { onclick: () => (map.closePopup(), directTo(w)) }, 'Direkte →'),
+            h('button', { onclick: remove }, 'Fjern'),
           ),
-        ),
-      ),
+        );
+      },
+      POPUP_OPTS,
     );
   });
 
