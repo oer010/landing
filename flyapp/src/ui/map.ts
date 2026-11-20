@@ -196,6 +196,10 @@ export function initMap(el: HTMLElement): L.Map {
   renderRoute();
   renderAerodata();
   scheduleMetars();
+  // METAR-fargene oppdateres hvert 5. minutt også når kartet står i ro (f.eks. GPS-følging),
+  // og straks appen åpnes igjen.
+  setInterval(() => document.visibilityState === 'visible' && scheduleMetars(), 5 * 60e3);
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && scheduleMetars());
   return map;
 }
 
