@@ -1,11 +1,11 @@
 // Service worker: appen og flyplassdata virker offline, og kartfliser du har
 // sett, caches slik at de også er tilgjengelige uten dekning i lufta.
-const APP_CACHE = 'vfr-app-v29';
+const APP_CACHE = 'vfr-app-aip-2026-09-03-1';
 const TILE_CACHE = 'vfr-tiles-v1';
 const OFFLINE_CACHE = 'vfr-offline-v1';
 const MAX_TILES = 6000;
 // Fylles inn ved bygging (vite.config.ts): alle JS/CSS-filer i appen.
-self.__ASSETS = ["./assets/index-DYPvUsjW.js","./assets/esm-B0oVf3ce.js","./assets/esm-BJvmgn4D.js","./assets/esm-BQ2BjYU0.js","./assets/esm-Cq08oz1M.js","./assets/web-763qp7XQ.js","./assets/web-BXVFWYjF.js","./assets/web-Ch8rEGz1.js","./assets/web-DfCvxNnh.js","./assets/index-2dDAbUtg.css"];
+self.__ASSETS = ["./assets/index-B4RVvmEW.js","./assets/esm-B1gm97Lt.js","./assets/esm-BJOynFXO.js","./assets/esm-WA5cW1t9.js","./assets/esm-y3XAKvi-.js","./assets/web-BouOrtDZ.js","./assets/web-CqeFmaNm.js","./assets/web-KAV8zjI3.js","./assets/web-MO3uhqoC.js","./assets/index-2dDAbUtg.css"];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
