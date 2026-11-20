@@ -41,3 +41,19 @@ describe('AIP AD 2.18', () => {
     expect(db.aipEdition).toBe('2026-09-03');
   });
 });
+
+describe('AIP-telefonnumre', () => {
+  it('finner tårn/AFIS, PPR og administrasjon med etikett', async () => {
+    const { parsePhones } = await import('../../scripts/aip.mjs');
+    const html = `<p>6 Administration Address Notodden Lufthavn AS 3676 Notodden Norge Telephone (+47) 35 02 60 70 Sentralbord / Switchboard (+47) 35 02 60 76 AFIS (+47) 35 02 60 71 Admin Fax NIL</p>
+      <p>1.4 PPR required for all TFC, www.myppr.no or tel. +47 905 62 416. PPR number must be stated.</p>
+      <p>If possible, call Karmoy TWR +47 52 83 07 19 , Flash LDG LGT.</p><p>FAX: +47 67 03 15 71</p><p>N 5912 E01045 postboks 2060</p>`;
+    const p = parsePhones(html) as { kind: string; tel: string }[];
+    expect(p.find((x) => x.tel === '+47 35 02 60 71')?.kind).toBe('atc');
+    expect(p.find((x) => x.tel === '+47 52 83 07 19')?.kind).toBe('atc');
+    expect(p.find((x) => x.tel === '+47 90 56 24 16')?.kind).toBe('ppr');
+    expect(p.find((x) => x.tel === '+47 35 02 60 70')?.kind).toBe('admin');
+    expect(p.some((x) => x.tel === '+47 67 03 15 71')).toBe(false);
+    expect(p[0].kind).toBe('atc');
+  });
+});

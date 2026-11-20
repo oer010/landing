@@ -1,4 +1,4 @@
-import { AIRPORT_TYPE_TEXT, ftToM, nearestAirports, searchAirports, type Airport } from '../../lib/data';
+import { AIRPORT_TYPE_TEXT, ftToM, nearestAirports, searchAirports, type Airport, type AipPhone } from '../../lib/data';
 import { bearingTrue, distanceNm, fmtHdg, formatLatLon } from '../../lib/geo';
 import { declination, fmtVar, trueToMag } from '../../lib/mag';
 import { categoryOf, CATEGORY_COLORS, CATEGORY_TEXT, decodeMetar, fetchMetars, fetchTafs, metarAgeMin, wxError } from '../../lib/metar';
@@ -151,6 +151,7 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
         ),
       ),
     ),
+    phoneSection(a) ?? '',
     section('Vær', wxBox),
     section(
       'Rullebaner',
@@ -214,6 +215,41 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
       })
       .catch((e) => clear(wxBox, h('p', { class: 'muted' }, wxError(e))));
   } else clear(wxBox, h('p', { class: 'muted' }, 'Ingen ICAO-kode, ingen METAR.'));
+}
+
+/** Tittel for et AIP-telefonnummer ut fra typen og teksten rundt. */
+function phoneTitle(p: AipPhone, a: Airport): string {
+  if (p.kind === 'atc') {
+    if (/supervisor/i.test(p.label)) return 'ATC supervisor';
+    if (/AFIS/i.test(p.label)) return 'AFIS';
+    if (/\b(TWR|Tower)\b/i.test(p.label)) return 'Tårn (TWR)';
+    if (/\bATS\b/i.test(p.label)) return 'ATS / tårn';
+    return a.towered ? 'Tårn / ATC' : 'AFIS / ATS';
+  }
+  if (p.kind === 'ppr') return 'PPR';
+  if (p.kind === 'met') return 'Værvarsling (MWO)';
+  if (p.kind === 'admin') return /sentralbord|switchboard/i.test(p.label) ? 'Sentralbord' : /\bMIL\b/.test(p.label) ? 'Militær vakt' : 'Flyplassen (administrasjon)';
+  return p.label.replace(/^…/, '').slice(0, 60);
+}
+
+function phoneSection(a: Airport): HTMLElement | null {
+  if (!a.phones?.length) return null;
+  const main = a.phones.filter((p) => p.kind !== 'other');
+  const rest = a.phones.filter((p) => p.kind === 'other');
+  const row = (p: AipPhone) =>
+    h(
+      'a',
+      { class: `tel-row tel-${p.kind}`, href: `tel:${p.tel.replace(/\s/g, '')}` },
+      h('span', { class: 'tel-title' }, phoneTitle(p, a)),
+      h('span', { class: 'tel-num' }, `📞 ${p.tel}`),
+      (p.kind === 'atc' || p.kind === 'ppr') && p.label && p.label !== 'Telefon' ? h('span', { class: 'tel-ctx muted small' }, `AIP: «${p.label}»`) : null,
+    );
+  return section(
+    'Telefon (AIP)',
+    main.length ? h('div', { class: 'tel-list' }, main.map(row)) : h('p', { class: 'muted small' }, 'Ingen tårn-/AFIS-nummer funnet i AIP for denne flyplassen.'),
+    rest.length ? h('details', null, h('summary', { class: 'muted' }, `Flere numre (${rest.length}): handling, drivstoff, parkering …`), h('div', { class: 'tel-list' }, rest.map(row))) : null,
+    h('p', { class: 'muted small' }, `Hentet fra AIP Norge AD 2 (${state.db.aipEdition ?? ''}). Trykk for å ringe. Sjekk alltid gjeldende AIP.`),
+  );
 }
 
 const tr = (k: string, v: string) => h('tr', null, h('td', { class: 'muted' }, k), h('td', null, v));

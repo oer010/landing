@@ -110,6 +110,7 @@ async function ifrPointNames(root) {
 export async function fetchAipData({ ap = new Map(), concurrency = 6, log = console.log } = {}) {
   const { edition, base, root, idents } = await currentEdition();
   const airports = {};
+  const phones = {};
   const pages = new Map();
   const queue = [...idents];
   const failed = [];
@@ -121,6 +122,8 @@ export async function fetchAipData({ ap = new Map(), concurrency = 6, log = cons
           pages.set(id, page.text);
           const rows = parseAd218(page.text, id);
           if (rows.length) airports[id] = rows;
+          const ph = parsePhones(page.text);
+          if (ph.length) phones[id] = ph;
         } catch (e) {
           failed.push(id);
         }
@@ -136,5 +139,65 @@ export async function fetchAipData({ ap = new Map(), concurrency = 6, log = cons
   } catch (e) {
     log(`Advarsel: VFR-punkter feilet: ${e.message}`);
   }
-  return { edition, source: 'AIP Norge (Avinor eAIP), AD 2.18', airports, vfr };
+  return { edition, source: 'AIP Norge (Avinor eAIP), AD 2.18', airports, phones, vfr };
+}
+
+/**
+ * Telefonnumre fra flyplassens AIP-side med etikett (TWR/AFIS/ATC, PPR, administrasjon, MET).
+ * Numrene står spredt (AD 2.2, 2.11, 2.20, 2.22), så etiketten tas fra teksten rett foran nummeret.
+ * @returns {{ label: string, tel: string, kind: 'atc'|'ppr'|'admin'|'met'|'other' }[]}
+ */
+export function parsePhones(html) {
+  const s = cleanAipHtml(html)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;|&#160;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/\s+/g, ' ');
+  const byNum = new Map();
+  const order = { atc: 0, ppr: 1, admin: 2, met: 3, other: 4 };
+  // Norske nummer: 8 siffer (evt. med +47), gruppert 2-2-2-2, 3-2-3 eller 3-5.
+  const re = /(?:\(\+47\)\s*|\+47\s*)?(\d{2}\s?\d{2}\s?\d{2}\s?\d{2}|\d{3}\s?\d{2}\s?\d{3}|\d{3}\s?\d{5})(?!\d)/g;
+  for (const m of s.matchAll(re)) {
+    const digits = m[1].replace(/\s/g, '');
+    if (digits.length !== 8) continue;
+    const before = s.slice(Math.max(0, m.index - 140), m.index);
+    // Bare numre som er merket som telefon (ikke koordinater, postnummer o.l.).
+    if (!/(TEL|TLF|Telephone|Phone|Sentralbord|Switchboard|call|AFIS|CIV\/OPR|MIL|ADMIN|tel\.?)[^0-9]{0,40}(\(\+47\)|\+47)?\s*$/i.test(before) && !/\(\+47\)|\+47/.test(m[0])) continue;
+    if (/FAX:?\s*(\(\+47\)|\+47)?\s*$/i.test(before)) continue;
+    // Etikett: teksten fra forrige setning/punkt frem til nummeret.
+    let label = before
+      .split(/(?:\.\s|\d\.\d+\s|\s\d{1,2}\s(?=[A-Z])|:\s(?=[A-Z][a-z]))/)
+      .pop()
+      .replace(/\s*(?:TEL|TLF|Telephone|tel)\.?:?\s*$/i, '')
+      .replace(/\s*(\(\+47\)|\+47)\s*$/, '')
+      .replace(/\s+[/,]\s*$/, '')
+      .trim();
+    if (label.length > 70) label = `…${label.slice(-68)}`;
+    const ctx = `${before.slice(-90)} `;
+    if (/AIS briefing|CENTRAL AIS|Scheduling Coordinator|slot/i.test(ctx)) continue;
+    // Typen avgjøres av nøkkelordet nærmest foran nummeret.
+    const KINDS = [
+      ['atc', /\b(TWR|Tower|ATC|ATS|AFIS|Supervisor|Approach|APP|Flygeled\w*|kontrolltårn|Control)\b/gi],
+      ['ppr', /\bPPR\b/gi],
+      ['met', /\b(MWO|MET|Værvarsl\w*)/gi],
+      ['admin', /(Administration|Telephone|Sentralbord|Switchboard|Admin)/gi],
+    ];
+    let kind = 'other';
+    let at = -1;
+    let word = '';
+    for (const [k, rx] of KINDS)
+      for (const mm of ctx.matchAll(rx))
+        if (mm.index > at) {
+          at = mm.index;
+          kind = k;
+          word = mm[0];
+        }
+    // «call … TWR» er sterkere enn en AFIS-/ATS-omtale i samme setning som noe annet.
+    const rank = order[kind] - (kind === 'atc' && /^(TWR|Tower|Supervisor)$/i.test(word) ? 0.5 : 0);
+    const prev = byNum.get(digits);
+    // Samme nummer flere steder: behold den mest relevante etiketten (TWR før PPR før admin …).
+    if (!prev || rank < prev.rank) byNum.set(digits, { label: label || 'Telefon', tel: `+47 ${digits.replace(/(\d{2})(\d{2})(\d{2})(\d{2})/, '$1 $2 $3 $4')}`, kind, rank });
+  }
+  const out = [...byNum.values()].sort((a, b) => a.rank - b.rank).map(({ rank, ...p }) => (void rank, p));
+  return out.sort((a, b) => order[a.kind] - order[b.kind]).slice(0, 10);
 }

@@ -36,6 +36,14 @@ export interface Airport extends LatLon {
   longestFt: number;
   /** Hvor frekvensene kommer fra. */
   freqSource: 'AIP' | 'OurAirports';
+  /** Telefonnumre fra AIP Norge (TWR/AFIS/ATC, PPR, administrasjon, MET …). */
+  phones?: AipPhone[];
+}
+
+export interface AipPhone {
+  label: string;
+  tel: string;
+  kind: 'atc' | 'ppr' | 'admin' | 'met' | 'other';
 }
 
 export interface Navaid extends LatLon {
@@ -200,8 +208,12 @@ export interface AipFreqRow {
 const SVC_SHORT: Record<string, string> = { SMC: 'GND', CLR: 'DEL', 'ATIS (ARR)': 'ATIS ARR', 'ATIS (DEP)': 'ATIS DEP' };
 
 /** Erstatter OurAirports-frekvenser med AIP Norge (AD 2.18) der det finnes. */
-export function applyAipFrequencies(db: AeroDb, aip: { edition: string; airports: Record<string, AipFreqRow[]> }): void {
+export function applyAipFrequencies(db: AeroDb, aip: { edition: string; airports: Record<string, AipFreqRow[]>; phones?: Record<string, AipPhone[]> }): void {
   db.aipEdition = aip.edition;
+  for (const [ident, list] of Object.entries(aip.phones ?? {})) {
+    const a = db.byIdent.get(ident);
+    if (a) a.phones = list;
+  }
   for (const [ident, rows] of Object.entries(aip.airports)) {
     const a = db.byIdent.get(ident);
     if (!a || !rows.length) continue;

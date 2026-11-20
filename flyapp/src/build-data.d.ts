@@ -4,6 +4,7 @@ declare module '*/scripts/build-data.mjs' {
 declare module '*/scripts/aip.mjs' {
   export function cleanAipHtml(html: string): string;
   export function parseAd218(html: string, ident: string): { svc: string; call: string; mhz: number[]; hr: string; rmk: string }[];
+  export function parsePhones(html: string): { label: string; tel: string; kind: 'atc' | 'ppr' | 'admin' | 'met' | 'other' }[];
 }
 declare module '*/scripts/vfr.mjs' {
   export function parseChartPoints(text: string): { n: string; lat: number; lon: number }[];
