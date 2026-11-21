@@ -208,6 +208,9 @@ export function notamPopup(list: Notam[], title?: string): HTMLElement {
         h('div', { class: 'notam-text' }, n.text),
       );
     }),
+    data && Date.now() - new Date(data.generated).getTime() > 2 * 3600e3
+      ? h('div', { class: 'warnbox small' }, `NOTAM-dataene er ${Math.round((Date.now() - new Date(data.generated).getTime()) / 3600e3)} timer gamle – nye NOTAM kan mangle. Sjekk ippc.no.`)
+      : null,
     h('div', { class: 'muted small' }, `Hentet ${data ? new Date(data.generated).toLocaleString('nb-NO', { dateStyle: 'short', timeStyle: 'short' }) : '–'} fra FAA NOTAM Search. Ikke offisiell briefing – sjekk alltid IPPC/AIS.`),
   );
 }

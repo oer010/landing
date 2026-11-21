@@ -25,6 +25,8 @@ jobs:
           node-version: 22
       - name: Hent NOTAM
         run: node flyapp/scripts/notam-fetch.mjs "$RUNNER_TEMP/notam.json"
+        env:
+          PREVIOUS_URL: https://raw.githubusercontent.com/${{ github.repository }}/notam-data/notam.json
       - name: Publiser til notam-data
         run: bash flyapp/scripts/publish-data.sh "$RUNNER_TEMP/notam.json"
         env:

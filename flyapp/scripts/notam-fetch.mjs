@@ -61,38 +61,74 @@ async function search(designators, offset) {
   for (let attempt = 0; ; attempt++) {
     try {
       const r = await fetch(URL_, { method: 'POST', body, headers: { 'content-type': 'application/x-www-form-urlencoded', 'user-agent': 'vfr-flyapp-notam/1.0' } });
+      // 403/429/5xx: FAA struper ved mange spørringer – vent og prøv igjen.
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return await r.json();
     } catch (e) {
-      if (attempt >= 3) throw e;
-      await new Promise((res) => setTimeout(res, 2000 * (attempt + 1)));
+      if (attempt >= 4) throw e;
+      const wait = [5, 15, 30, 60][attempt] * 1000;
+      console.log(`${designators.slice(0, 3).join(',')}…: ${e.message}, prøver igjen om ${wait / 1000} s`);
+      await new Promise((res) => setTimeout(res, wait));
     }
   }
 }
 
 const notams = new Map();
 const skipped = [];
-// Én lokasjon per spørring: FAA avviser hele spørringen om én kode er ukjent for dem.
-for (const loc of locs) {
-  for (let offset = 0; ; ) {
-    const d = await search([loc], offset);
+const failed = [];
+// Grupper på 15 (få spørringer). FAA avviser hele gruppen om én kode er ukjent for dem –
+// da tas de ukjente ut og gruppen spørres på nytt.
+async function fetchGroup(group) {
+  let batch = [...group];
+  for (let offset = 0; batch.length; ) {
+    const d = await search(batch, offset);
     if (d.error) {
-      skipped.push(loc);
-      break;
+      const bad = [...String(d.error).matchAll(/'([A-Z0-9]{3,4})'/g)].map((m) => m[1]);
+      if (!bad.length) throw new Error(d.error);
+      skipped.push(...bad);
+      batch = batch.filter((b) => !bad.includes(b));
+      offset = 0;
+      continue;
     }
     const list = d.notamList ?? [];
-    if (list.length && !notams.size) console.log('Eksempel:', JSON.stringify(list[0]).slice(0, 600));
     for (const n of list) {
       const msg = (n.icaoMessage || '').trim();
       if (!msg) continue;
       const id = msg.match(/^[A-Z]\d{4}\/\d{2}/)?.[0] ?? `${n.facilityDesignator}-${n.notamNumber}`;
-      notams.set(id, { loc: n.icaoId || n.facilityDesignator || loc, msg });
+      notams.set(id, { loc: n.icaoId || n.facilityDesignator || batch[0], msg });
     }
     const total = d.totalNotamCount ?? 0;
     offset += list.length;
     if (!list.length || offset >= total) break;
+    await new Promise((r) => setTimeout(r, 700));
   }
-  await new Promise((r) => setTimeout(r, 150));
+}
+for (let i = 0; i < locs.length; i += 15) {
+  const group = locs.slice(i, i + 15);
+  try {
+    await fetchGroup(group);
+  } catch (e) {
+    console.log(`Feilet for ${group.join(' ')}: ${e.message}`);
+    failed.push(...group);
+  }
+  await new Promise((r) => setTimeout(r, 1500));
+}
+// Flyplasser som feilet: behold forrige publiserte NOTAM for dem (bedre enn ingenting).
+if (failed.length && process.env.PREVIOUS_URL) {
+  try {
+    const prev = await (await fetch(process.env.PREVIOUS_URL)).json();
+    let kept = 0;
+    for (const n of prev.notams ?? []) {
+      const id = n.msg.match(/^[A-Z]\d{4}\/\d{2}/)?.[0];
+      if (id && failed.includes(n.loc) && !notams.has(id)) {
+        notams.set(id, n);
+        kept++;
+      }
+    }
+    console.log(`Beholdt ${kept} NOTAM fra forrige kjøring for ${failed.length} lokasjoner som feilet`);
+  } catch (e) {
+    console.log(`Kunne ikke hente forrige fil: ${e.message}`);
+  }
 }
 console.log(`${notams.size} NOTAM fra ${locs.length - skipped.length} lokasjoner. Ukjent hos FAA: ${skipped.join(' ') || '–'}`);
 
@@ -100,6 +136,6 @@ if (!notams.size) {
   console.error('Fant ingen NOTAM – beholder forrige fil');
   process.exit(1);
 }
-const data = { generated: new Date().toISOString(), source: 'FAA NOTAM Search (notams.aim.faa.gov), ICAO-format', notams: [...notams.values()] };
+const data = { generated: new Date().toISOString(), source: 'FAA NOTAM Search (notams.aim.faa.gov), ICAO-format', failed, notams: [...notams.values()] };
 await writeFile(out, JSON.stringify(data));
 console.log(`Skrev ${notams.size} NOTAM til ${out}`);
