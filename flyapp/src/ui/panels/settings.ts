@@ -6,7 +6,7 @@ import { state } from '../state';
 
 export function renderSettings(el: HTMLElement): void {
   const s = state.settings;
-  const check = (label: string, key: 'showAirports' | 'showNavaids' | 'showMetars' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams' | 'showObstacles' | 'showSigmet' | 'alertAirspace' | 'alertObstacles' | 'alertTerrain' | 'alertSound') =>
+  const check = (label: string, key: 'showAirports' | 'showNavaids' | 'showMetars' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams' | 'showObstacles' | 'showSigmet' | 'showIsogons' | 'alertAirspace' | 'alertObstacles' | 'alertTerrain' | 'alertSound') =>
     h(
       'label',
       { class: 'check' },
@@ -37,6 +37,7 @@ export function renderSettings(el: HTMLElement): void {
       check('NOTAM', 'showNotams'),
       check('Hindre (master, tårn, vindturbiner)', 'showObstacles'),
       check('SIGMET/AIRMET-områder', 'showSigmet'),
+      check('Misvisning (isogoner, WMM 2025)', 'showIsogons'),
       numField('Fartsvektor', s.vectorMin, (v) => state.updateSettings({ vectorMin: v }), { unit: 'min', min: 1, max: 30 }),
     ),
     section(

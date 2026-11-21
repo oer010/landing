@@ -20,6 +20,7 @@ import { renameWaypoint } from './naming';
 import { initNotamLayer, notamPopup, notamsForAirport, renderNotams } from './notamlayer';
 import { initObstacleLayer } from './obstaclelayer';
 import { initWxLayer } from './wxlayer';
+import { initIsogons } from './isogons';
 
 export let map: L.Map;
 
@@ -104,6 +105,7 @@ export function initMap(el: HTMLElement): L.Map {
   initNotamLayer(map, POPUP_OPTS);
   initObstacleLayer(map, POPUP_OPTS);
   initWxLayer(map, POPUP_OPTS);
+  initIsogons(map);
   for (const l of [routeLayer, trackLayer, ownshipLayer]) l.addTo(map);
   loadVfr().then((d) => {
     vfr = d;
@@ -891,6 +893,7 @@ function showAirspacesAt(p: LatLon): void {
         { class: 'popup' },
         h('div', { class: 'p-title' }, 'Luftrom her'),
         h('div', { class: 'p-muted' }, `Lavest først · AIRAC ${asDb.airac}`),
+        h('div', { class: 'p-var' }, `Misvisning her: ${fmtVar(declination(p))} (WMM 2025, ${new Date().getFullYear()})`),
         airspaceList(list),
         h(
           'div',

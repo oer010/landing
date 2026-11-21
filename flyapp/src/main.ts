@@ -115,13 +115,14 @@ function mapButtons(): HTMLElement {
   // Kartlag av/på.
   const layersBtn = h('button', { class: 'fab', title: 'Kartlag' }, 'Lag');
   const sheet = h('div', { class: 'layer-sheet', hidden: true });
-  type Key = 'showAirports' | 'showNavaids' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams' | 'showObstacles' | 'showSigmet' | 'showMetars';
+  type Key = 'showAirports' | 'showNavaids' | 'showAirspace' | 'showVfrPoints' | 'showVfrCharts' | 'showNotams' | 'showObstacles' | 'showSigmet' | 'showIsogons' | 'showMetars';
   const items: [Key, string][] = [
     ['showVfrPoints', 'VFR-rapporteringspunkter'],
     ['showVfrCharts', 'VFR-ruter (AIP)'],
     ['showNotams', 'NOTAM'],
     ['showObstacles', 'Hindre (master, vindturbiner …)'],
     ['showSigmet', 'SIGMET/AIRMET'],
+    ['showIsogons', 'Misvisning (isogoner)'],
     ['showAirspace', 'Luftrom'],
     ['showAirports', 'Flyplasser'],
     ['showNavaids', 'VOR/NDB'],

@@ -105,6 +105,7 @@ export interface Settings {
   showNotams: boolean;
   showObstacles: boolean;
   showSigmet: boolean;
+  showIsogons: boolean;
   alertAirspace: boolean;
   alertObstacles: boolean;
   alertTerrain: boolean;
@@ -125,6 +126,7 @@ export const DEFAULT_SETTINGS: Settings = {
   showNotams: true,
   showObstacles: true,
   showSigmet: true,
+  showIsogons: false,
   alertAirspace: true,
   alertObstacles: true,
   alertTerrain: true,
