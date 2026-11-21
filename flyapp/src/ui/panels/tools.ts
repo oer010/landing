@@ -2,6 +2,7 @@ import { conv, densityAltitude, isaTempC, pressureAltitude, trueAirspeed, cloudB
 import { fmtHdg, formatLatLon } from '../../lib/geo';
 import { windComponents, windTriangle } from '../../lib/navlog';
 import { sunTimes } from '../../lib/sun';
+import { declination, magToTrue, trueToMag } from '../../lib/mag';
 import { clear, fmt, h, section } from '../dom';
 import { map } from '../map';
 import { state } from '../state';
@@ -46,15 +47,25 @@ function calc(title: string, fields: { key: string; label: string; unit?: string
   return section(title, h('div', { class: 'grid2' }, inputs), out);
 }
 
+/** Misvisning der du er (GPS), ellers midt i kartet. Øst = positiv. */
+function localVariation(): { v: number; where: string } {
+  const p = state.position ?? (map ? { lat: map.getCenter().lat, lon: map.getCenter().lng } : null);
+  if (!p) return { v: 0, where: '' };
+  return { v: Math.round(declination(p) * 10) / 10, where: state.position ? 'der du er' : 'midt i kartet' };
+}
+
 export function renderTools(el: HTMLElement): void {
+  const lv = localVariation();
+  const varLabel = 'Misvisning (Ø +, V −)';
   el.append(
     calc(
       'Vindtrekant',
       [
-        { key: 'tc', label: 'Kurs (TC)', unit: '°', value: 270 },
+        { key: 'tc', label: 'Kurs (TC, rettvisende)', unit: '°', value: 270 },
         { key: 'tas', label: 'TAS', unit: 'kt', value: state.currentAircraft.tas },
-        { key: 'wd', label: 'Vind fra', unit: '°', value: 300 },
+        { key: 'wd', label: 'Vind fra (rettvisende)', unit: '°', value: 300 },
         { key: 'ws', label: 'Vindstyrke', unit: 'kt', value: 15 },
+        { key: 'var', label: varLabel, unit: '°', value: lv.v },
       ],
       (v) => {
         const s = windTriangle(v.tc, v.tas, { dir: v.wd, speed: v.ws });
@@ -62,9 +73,23 @@ export function renderTools(el: HTMLElement): void {
         return [
           ['Styrekurs (TH)', `${fmtHdg(s.heading)}°`],
           ['Vindkorreksjon', `${s.wca > 0 ? '+' : ''}${s.wca.toFixed(1)}°`],
+          ['Magnetisk kurs (MC)', `${fmtHdg(trueToMag(v.tc, v.var))}°`],
+          ['Magnetisk styrekurs (MH)', `${fmtHdg(trueToMag(s.heading, v.var))}°`],
           ['Fart over bakken', `${s.groundSpeed.toFixed(0)} kt`],
         ];
       },
+    ),
+    calc(
+      `Rettvisende ↔ magnetisk${lv.where ? ` (misvisning ${lv.where} er forhåndsutfylt)` : ''}`,
+      [
+        { key: 'deg', label: 'Kurs / peiling', unit: '°', value: 90 },
+        { key: 'var', label: varLabel, unit: '°', value: lv.v },
+      ],
+      (v) => [
+        ['Rettvisende → magnetisk', `${fmtHdg(trueToMag(v.deg, v.var))}°M`],
+        ['Magnetisk → rettvisende', `${fmtHdg(magToTrue(v.deg, v.var))}°T`],
+        ['Huskeregel', v.var >= 0 ? 'Østlig misvisning: trekk fra (T → M)' : 'Vestlig misvisning: legg til (T → M)'],
+      ],
     ),
     calc(
       'Sidevind',
