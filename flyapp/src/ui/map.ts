@@ -89,6 +89,10 @@ export function initMap(el: HTMLElement): L.Map {
     renderer: canvas,
     worldCopyJump: true,
   }).setView(last?.c ?? [60.5, 9.5], last?.z ?? 7);
+  // Flyfiguren skal alltid synes: egen rute over markør- (600) og etikettlaget (650), under bobler (700).
+  const own = map.createPane('ownship');
+  own.style.zIndex = '690';
+  own.style.pointerEvents = 'none';
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   L.control.scale({ position: 'bottomleft', metric: true, imperial: false, maxWidth: 160 }).addTo(map);
   // Nautisk skala i tillegg.
@@ -743,7 +747,8 @@ function renderOwnship(): void {
     ownshipMarker = L.marker([p.lat, p.lon], {
       icon: L.divIcon({ className: 'ownship', html: planeSvg(rot), iconSize: [40, 40], iconAnchor: [20, 20] }),
       interactive: false,
-      zIndexOffset: 1000,
+      // Eget lag over alle merker og etiketter (luftrom, NOTAM, SIGMET), men under infoboblene.
+      pane: 'ownship',
     }).addTo(ownshipLayer);
   } else {
     ownshipMarker.setLatLng([p.lat, p.lon]);
