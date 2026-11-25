@@ -476,3 +476,12 @@ tr.warn td { color: #b45309; }
 .popup .p-routebar button:first-of-type { background: #a21caf; border-color: #a21caf; color: #ffffff; }
 .isogon-lbl span { display: inline-block; padding: 0 5px; border-radius: 6px; background: rgb(255 255 255 / 0.85); color: #0e7490; font: 700 11px/16px system-ui, sans-serif; border: 1px solid #0e7490; white-space: nowrap; }
 .p-var { margin: 4px 0 6px; font-weight: 600; color: #0e7490; }
+
+/* Flightplan */
+#fpl-section h4 { margin: 14px 0 6px; }
+.fpl-route { width: 100%; font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; }
+.fpl-opts { gap: 4px 14px; margin-bottom: 6px; }
+.fpl-actions button { min-height: 44px; }
+.checks li.warn { color: #f59e0b; }
+.fpl-filed { border-left: 4px solid #c026d3; padding: 6px 10px; margin: 6px 0; }
+a.btn { display: inline-flex; align-items: center; min-height: 40px; padding: 6px 12px; border-radius: 8px; background: #1d4ed8; color: #fff; text-decoration: none; font-weight: 600; }

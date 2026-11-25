@@ -265,3 +265,30 @@ describe('høyde per legg', () => {
     expect(legs.map((l) => l.altFt)).toEqual([5500, 4500]);
   });
 });
+
+describe('flightplan – felt 15/16/19 og kontroll', () => {
+  it('lager full ICAO-plan med VFR-nivå, alternativer og felt 19', async () => {
+    const { icaoFlightPlan, checkFpl } = await import('./export');
+    const { FLEET } = await import('./fleet');
+    const ac = FLEET[0];
+    const wps = [
+      { id: 'ENKJ', kind: 'airport' as const, lat: 59.97, lon: 11.04 },
+      { id: 'X', kind: 'user' as const, lat: 60.5, lon: 9.5 },
+      { id: 'ENBR', kind: 'airport' as const, lat: 60.29, lon: 5.22 },
+    ];
+    const eobt = new Date('2026-11-26T10:30:00Z');
+    const t = icaoFlightPlan({ aircraft: ac, waypoints: wps, eobt, eetMin: 105, enduranceMin: 330, altitudeFt: 4500, tas: 125, persons: 2, levelVfr: true, alternates: ['ENZV', 'enso'], remarks: 'PIC TEL 99999999', item19: { radio: 'VE', survival: 'M', jackets: 'L', pilot: 'Ola Nordmann' } });
+    expect(t).toContain('(FPL-LNFTQ-VG');
+    expect(t).toContain('-DA40/L-SDFGY/S');
+    expect(t).toContain('-ENKJ1030');
+    expect(t).toContain('-N0125VFR DCT 6030N00930E');
+    expect(t).toContain('-ENBR0145 ENZV ENSO');
+    expect(t).toContain('RMK/PIC TEL 99999999');
+    expect(t).toContain('-E/0530 P/002 R/VE S/M J/L A/WHITE C/OLA NORDMANN)');
+    const c = checkFpl({ callsign: 'LNFTQ', aircraft: ac, waypoints: wps, eobt, eetMin: 105, enduranceMin: 330, persons: 2, pilot: 'Ola', now: new Date('2026-11-26T10:10:00Z') });
+    expect(c.map((x) => x.text).join(' ')).toContain('30 min');
+    expect(c.every((x) => x.level !== 'error')).toBe(true);
+    const bad = checkFpl({ callsign: 'LNFTQ', aircraft: ac, waypoints: wps, eobt, eetMin: 105, enduranceMin: 120, persons: 0, now: new Date('2026-11-26T11:00:00Z') });
+    expect(bad.filter((x) => x.level === 'error').length).toBeGreaterThanOrEqual(2);
+  });
+});

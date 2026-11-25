@@ -7,9 +7,10 @@ import { fmtVar } from '../../lib/mag';
 import { computeNavlog, fmtMin, fuelPlan, legAltitudes, suggestVfrAltitude, vfrCruiseAltitudeOk, type NavlogLeg } from '../../lib/navlog';
 import { categoryOf, CATEGORY_COLORS, fetchMetars, wxError } from '../../lib/metar';
 import { isNight, sunTimes } from '../../lib/sun';
-import { download, fplFileName, icaoFlightPlan, routeToFpl, routeToGpx } from '../../lib/export';
+import { download, fplFileName, routeToFpl, routeToGpx } from '../../lib/export';
 import { perfOf, uid } from '../../lib/store';
 import { terrainSection } from './terrainprofile';
+import { filedPlansBox, fplSection, isFplOpen, toggleFpl } from './fpl';
 import { computeProfile, PATTERN_AGL, type Profile } from '../../lib/profile';
 import { isNative } from '../../lib/platform';
 import { badge, clear, fmt, h, numField, section, textField, toast } from '../dom';
@@ -111,6 +112,8 @@ export function renderRoute(el: HTMLElement): void {
     onBoard: fuelOnBoard,
   });
 
+  const filedBox = filedPlansBox();
+  if (filedBox) el.append(filedBox);
   el.append(
     fromToSection(),
     section(
@@ -223,7 +226,7 @@ export function renderRoute(el: HTMLElement): void {
           'G1000 / Garmin .fpl',
         ),
         h('button', { onclick: () => printNavlog(prof), disabled: !legs.length }, '🖨 Navlogg'),
-        h('button', { onclick: () => showFpl(el, prof.totalMin ?? 0, fp.enduranceMin), disabled: !legs.length }, 'ICAO-plan'),
+        h('button', { class: isFplOpen() ? 'on' : 'primary', onclick: () => toggleFpl(), disabled: !legs.length }, isFplOpen() ? '✈ Skjul flightplan' : '✈ Flightplan'),
       ),
       h(
         'div',
@@ -239,6 +242,10 @@ export function renderRoute(el: HTMLElement): void {
       savedRoutesList(),
     ),
   );
+  if (legs.length) {
+    const fps = fplSection(prof.totalMin ?? 0, fp.enduranceMin);
+    if (fps) el.append(fps);
+  }
 }
 
 const slug = (s: string) => s.replace(/[^\w\-]+/g, '_').slice(0, 40) || 'rute';
@@ -479,32 +486,6 @@ function savedRoutesList(): HTMLElement | null {
       ),
     ),
   );
-}
-
-function showFpl(el: HTMLElement, eetMin: number, enduranceMin: number): void {
-  const r = state.route;
-  const eobt = r.departureTime ? new Date(r.departureTime) : new Date(Date.now() + 3600000);
-  const text = icaoFlightPlan({
-    aircraft: state.currentAircraft,
-    waypoints: r.waypoints,
-    eobt,
-    eetMin,
-    enduranceMin,
-    altitudeFt: r.altitudeFt,
-    tas: state.currentAircraft.tas,
-    persons: r.persons,
-    alternate: r.alternate || undefined,
-  });
-  const ta = h('textarea', { class: 'fpl', rows: 8, readonly: true }, text);
-  const box = section(
-    'ICAO flightplan (utkast)',
-    h('p', { class: 'muted small' }, 'Kontroller alle felt og lever planen via den offisielle tjenesten (f.eks. ippc.no). Appen leverer ikke planer selv.'),
-    ta,
-    h('button', { onclick: () => navigator.clipboard?.writeText(text).then(() => toast('Kopiert')) }, 'Kopier'),
-  );
-  el.querySelector('.fpl')?.closest('section')?.remove();
-  el.append(box);
-  box.scrollIntoView({ behavior: 'smooth' });
 }
 
 function printNavlog(prof: Profile): void {

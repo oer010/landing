@@ -141,6 +141,22 @@ const hhmm = (min: number) => {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}${String(m % 60).padStart(2, '0')}`;
 };
 
+/** Felt 19 (tilleggsopplysninger) – nødradio, overlevelsesutstyr, vester, flåter. */
+export interface Fpl19 {
+  /** R/: U (UHF 243), V (VHF 121.5), E (ELT). */
+  radio?: string;
+  /** S/: P (polar), D (ørken), M (maritim), J (jungel). */
+  survival?: string;
+  /** J/: L (lys), F (fluorescein), U (UHF), V (VHF). */
+  jackets?: string;
+  /** D/ antall, kapasitet, dekket (C), farge. */
+  dinghies?: string;
+  /** N/ andre merknader. */
+  remarks?: string;
+  /** C/ fartøysjef. */
+  pilot?: string;
+}
+
 /** ICAO-flightplan (FPL) som tekst, til kopiering inn i innleveringstjenesten. */
 export function icaoFlightPlan(o: {
   aircraft: Aircraft;
@@ -153,33 +169,89 @@ export function icaoFlightPlan(o: {
   persons: number;
   alternate?: string;
   remarks?: string;
+  /** Kallesignal (felt 7); standard = registreringen uten bindestrek. */
+  callsign?: string;
+  /** «VFR» som nivå (felt 15) i stedet for A0xx. */
+  levelVfr?: boolean;
+  /** Overstyr rutedelen av felt 15. */
+  route?: string;
+  /** Inntil to alternative flyplasser. */
+  alternates?: string[];
+  item19?: Fpl19;
 }): string {
   const ac = o.aircraft;
   const dep = o.waypoints[0];
   const dest = o.waypoints[o.waypoints.length - 1];
-  const icaoAd = (w: Waypoint) => (w.kind === 'airport' && /^[A-Z]{4}$/.test(w.id) ? w.id : 'ZZZZ');
-  const level = `A${String(Math.round(o.altitudeFt / 100)).padStart(3, '0')}`;
-  const route = o.waypoints
+  const level = o.levelVfr ? 'VFR' : `A${String(Math.round(o.altitudeFt / 100)).padStart(3, '0')}`;
+  const route = o.route?.trim() || fplRoute(o.waypoints);
+  const item18: string[] = [];
+  const dof = o.eobt.toISOString().slice(2, 10).replace(/-/g, '');
+  item18.push(`DOF/${dof}`);
+  if (fplAd(dep) === 'ZZZZ') item18.push(`DEP/${formatIcaoCoord(dep)} ${dep.name ?? dep.id}`.toUpperCase());
+  if (fplAd(dest) === 'ZZZZ') item18.push(`DEST/${formatIcaoCoord(dest)} ${dest.name ?? dest.id}`.toUpperCase());
+  if (o.remarks) item18.push(`RMK/${o.remarks.toUpperCase()}`);
+  const callsign = (o.callsign || ac.registration).replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+  const alts = (o.alternates ?? (o.alternate ? [o.alternate] : [])).map((a) => a.trim().toUpperCase()).filter(Boolean).slice(0, 2);
+  const i19 = o.item19 ?? {};
+  const f19 = [
+    `E/${hhmm(o.enduranceMin)}`,
+    `P/${String(o.persons).padStart(3, '0')}`,
+    i19.radio ? `R/${i19.radio.toUpperCase()}` : '',
+    i19.survival ? `S/${i19.survival.toUpperCase()}` : '',
+    i19.jackets ? `J/${i19.jackets.toUpperCase()}` : '',
+    i19.dinghies ? `D/${i19.dinghies.toUpperCase()}` : '',
+    `A/${ac.colour.toUpperCase()}`,
+    i19.remarks ? `N/${i19.remarks.toUpperCase()}` : '',
+    i19.pilot ? `C/${i19.pilot.toUpperCase()}` : '',
+  ].filter(Boolean);
+  return [
+    `(FPL-${callsign}-VG`,
+    `-${ac.icaoType.toUpperCase()}/${ac.wake}-${ac.equipment}/${ac.surveillance}`,
+    `-${fplAd(dep)}${o.eobt.toISOString().slice(11, 13)}${o.eobt.toISOString().slice(14, 16)}`,
+    `-N${String(Math.round(o.tas)).padStart(4, '0')}${level} ${route || 'DCT'}`.trimEnd(),
+    `-${fplAd(dest)}${hhmm(o.eetMin)}${alts.length ? ` ${alts.join(' ')}` : ''}`,
+    `-${item18.join(' ')}`,
+    `-${f19.join(' ')})`,
+  ].join('\n');
+}
+
+/** Flyplass i felt 13/16: ICAO-kode, ellers ZZZZ (med DEP/ eller DEST/ i felt 18). */
+export const fplAd = (w: Waypoint) => (w.kind === 'airport' && /^[A-Z]{4}$/.test(w.id) ? w.id : 'ZZZZ');
+
+/** Rutedelen av felt 15: navaids som ident, øvrige punkter som koordinater, DCT mellom. */
+export function fplRoute(wps: Waypoint[]): string {
+  return wps
     .slice(1, -1)
     .map((w) => (w.kind === 'navaid' ? w.id : formatIcaoCoord(w)))
     .map((p) => `DCT ${p}`)
     .join(' ');
-  const item18: string[] = [];
-  const dof = o.eobt.toISOString().slice(2, 10).replace(/-/g, '');
-  item18.push(`DOF/${dof}`);
-  if (icaoAd(dep) === 'ZZZZ') item18.push(`DEP/${formatIcaoCoord(dep)} ${dep.name ?? dep.id}`.toUpperCase());
-  if (icaoAd(dest) === 'ZZZZ') item18.push(`DEST/${formatIcaoCoord(dest)} ${dest.name ?? dest.id}`.toUpperCase());
-  if (o.remarks) item18.push(`RMK/${o.remarks.toUpperCase()}`);
-  const reg = ac.registration.replace(/-/g, '').toUpperCase();
-  return [
-    `(FPL-${reg}-VG`,
-    `-${ac.icaoType.toUpperCase()}/${ac.wake}-${ac.equipment}/${ac.surveillance}`,
-    `-${icaoAd(dep)}${o.eobt.toISOString().slice(11, 13)}${o.eobt.toISOString().slice(14, 16)}`,
-    `-N${String(Math.round(o.tas)).padStart(4, '0')}${level} ${route || 'DCT'}`.trimEnd(),
-    `-${icaoAd(dest)}${hhmm(o.eetMin)}${o.alternate ? ` ${o.alternate.toUpperCase()}` : ''}`,
-    `-${item18.join(' ')}`,
-    `-E/${hhmm(o.enduranceMin)} P/${String(o.persons).padStart(3, '0')} A/${ac.colour.toUpperCase()})`,
-  ].join('\n');
+}
+
+export interface FplCheck {
+  level: 'error' | 'warn';
+  text: string;
+}
+
+/** Kontroll før levering (AIP Norge ENR 1.10 og ICAO Doc 4444). */
+export function checkFpl(o: { callsign: string; aircraft: Aircraft; waypoints: Waypoint[]; eobt: Date; eetMin: number; enduranceMin: number; persons: number; now?: Date; pilot?: string }): FplCheck[] {
+  const out: FplCheck[] = [];
+  const now = o.now ?? new Date();
+  const cs = o.callsign.replace(/[^A-Za-z0-9]/g, '');
+  if (!cs || cs.length > 7) out.push({ level: 'error', text: 'Kallesignal må være 1–7 bokstaver/tall (f.eks. LNFTQ).' });
+  if (!/^[A-Z0-9]{2,4}$/i.test(o.aircraft.icaoType)) out.push({ level: 'error', text: 'ICAO-flytype mangler (f.eks. DA40) – sjekk flyprofilen.' });
+  if (!o.aircraft.equipment || !o.aircraft.surveillance) out.push({ level: 'error', text: 'Utstyr (felt 10a/10b) mangler – sjekk flyprofilen.' });
+  if (!o.aircraft.colour) out.push({ level: 'warn', text: 'Farge og merking (A/) mangler i flyprofilen.' });
+  if (o.waypoints.length < 2) out.push({ level: 'error', text: 'Ruten må ha avgang og destinasjon.' });
+  const minutesAhead = (o.eobt.getTime() - now.getTime()) / 60000;
+  if (minutesAhead < 0) out.push({ level: 'error', text: 'EOBT er passert – velg et senere tidspunkt.' });
+  else if (minutesAhead < 30) out.push({ level: 'warn', text: 'VFR innenfor Polaris FIR: planen skal leveres senest 30 min før avgang (AIP ENR 1.10).' });
+  if (minutesAhead > 120 * 60) out.push({ level: 'warn', text: 'EOBT er mer enn 120 timer frem i tid.' });
+  if (o.persons < 1) out.push({ level: 'error', text: 'Antall personer om bord må være minst 1.' });
+  if (o.enduranceMin <= 0) out.push({ level: 'error', text: 'Utholdenhet (E/) mangler – legg inn drivstoff om bord.' });
+  else if (o.enduranceMin < o.eetMin + 30) out.push({ level: 'warn', text: 'Utholdenhet er mindre enn EET + 30 min reserve.' });
+  if (o.eetMin <= 0) out.push({ level: 'error', text: 'EET mangler – sjekk ruten.' });
+  if (!o.pilot) out.push({ level: 'warn', text: 'Fartøysjef (C/) er ikke fylt ut.' });
+  return out;
 }
 
 export function download(filename: string, content: string, type = 'application/octet-stream'): void {
