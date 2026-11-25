@@ -861,7 +861,7 @@ function renderAirspace(): void {
 function updateAirspaceLabels(): void {
   const c = map.getContainer();
   const z = map.getZoom();
-  for (const lvl of [8, 9, 10, 11]) c.classList.toggle(`show-as${lvl}`, z >= lvl);
+  for (const lvl of [8, 9, 10, 11, 12]) c.classList.toggle(`show-as${lvl}`, z >= lvl);
 }
 
 const esc = (t: string) => t.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch] as string);
