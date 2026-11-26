@@ -1,10 +1,12 @@
 name: AIP-data
-# Sjekker hver uke om Avinor har publisert en ny utgave av AIP Norge (AIRAC hver 28. dag).
+# Sjekker hver dag om Avinor har publisert en ny utgave av AIP Norge (AIRAC hver 28. dag),
+# og om luftromskilden (relet/pg-xc) har fått nyere data.
 # Ved ny utgave hentes alle AIP-baserte data på nytt (frekvenser, telefonnumre, VFR-punkter
 # og -ruter, luftrom, FIR-grense, flyplasser), appen bygges og publiseres til GitHub Pages.
 on:
   schedule:
-    - cron: '41 4 * * 2,5'
+    - cron: '41 4 * * *'
+    - cron: '13 16 * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -31,12 +33,12 @@ jobs:
         id: ed
         run: node flyapp/scripts/aip-edition.mjs | tee -a "$GITHUB_OUTPUT"
       - name: Installer avhengigheter
-        if: steps.ed.outputs.changed == 'true' || inputs.force
+        if: steps.ed.outputs.changed == 'true' || steps.ed.outputs.airspace_changed == 'true' || inputs.force
         run: |
           sudo apt-get update -q && sudo apt-get install -y -q poppler-utils
           cd flyapp && npm ci --no-audit --no-fund
       - name: Hent data, test og bygg
-        if: steps.ed.outputs.changed == 'true' || inputs.force
+        if: steps.ed.outputs.changed == 'true' || steps.ed.outputs.airspace_changed == 'true' || inputs.force
         run: |
           cd flyapp
           npm run data
@@ -46,11 +48,11 @@ jobs:
           grep -n "APP_CACHE = " public/sw.js
           npm run pages
       - name: Publiser
-        if: steps.ed.outputs.changed == 'true' || inputs.force
+        if: steps.ed.outputs.changed == 'true' || steps.ed.outputs.airspace_changed == 'true' || inputs.force
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898315+github-actions[bot]@users.noreply.github.com"
           git add -A vfr flyapp/public/sw.js
           if git diff --cached --quiet; then echo "Ingen endringer"; exit 0; fi
-          git commit -qm "AIP Norge ${{ steps.ed.outputs.current }}: oppdaterte data"
+          git commit -qm "AIP Norge ${{ steps.ed.outputs.current }} / luftrom ${{ steps.ed.outputs.airspace_source }}: oppdaterte data"
           git push -q origin HEAD:main
