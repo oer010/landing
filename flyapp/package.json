@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit",
     "ios:sync": "npm run build && cap sync ios",
     "ios": "npm run build && cap sync ios && cap open ios",
-    "pages": "npm run build && rm -rf ../vfr && cp -r dist ../vfr && rm -f ../vfr/_redirects"
+    "pages": "node scripts/sync-data.mjs && npm run build && rm -rf ../vfr && cp -r dist ../vfr && rm -f ../vfr/_redirects"
   },
   "dependencies": {
     "@capacitor-community/keep-awake": "^8.0.1",
