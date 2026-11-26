@@ -7,7 +7,7 @@ import { fmtDeg, runwayEnds } from '../../lib/runway';
 import { runwayDiagram } from '../rwydiagram';
 import { sunTimes } from '../../lib/sun';
 import { badge, clear, fmt, h, section, tafView } from '../dom';
-import { addRoutePoint, AIRPORT_COLORS, flyTo, map } from '../map';
+import { addRoutePoint, AIRPORT_COLORS, flyTo, map, vfrChartLinks } from '../map';
 import { directTo } from '../position';
 import { airportToWaypoint, state } from '../state';
 
@@ -152,6 +152,10 @@ function renderAirportDetail(el: HTMLElement, a: Airport): void {
       ),
     ),
     phoneSection(a) ?? '',
+    (() => {
+      const c = vfrChartLinks(a.ident);
+      return c ? section('Kart (AIP)', c) : '';
+    })(),
     section('Vær', wxBox),
     section(
       'Rullebaner',

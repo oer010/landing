@@ -56,3 +56,11 @@ jobs:
           if git diff --cached --quiet; then echo "Ingen endringer"; exit 0; fi
           git commit -qm "AIP Norge ${{ steps.ed.outputs.current }} / luftrom ${{ steps.ed.outputs.airspace_source }}: oppdaterte data"
           git push -q origin HEAD:main
+      - name: Publiser AIP-status (leses av appen ved oppstart)
+        if: always() && steps.ed.outputs.current != ''
+        run: |
+          printf '{"current":"%s","checkedAt":"%s"}\n' "${{ steps.ed.outputs.current }}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$RUNNER_TEMP/aip-status.json"
+          bash flyapp/scripts/publish-data.sh "$RUNNER_TEMP/aip-status.json"
+        env:
+          TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}

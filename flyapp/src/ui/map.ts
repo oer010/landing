@@ -5,6 +5,7 @@ import { bearingTrue, destination, distanceNm, fmtHdg, formatLatLon, type LatLon
 import { CATEGORY_COLORS, categoryOf, fetchMetars, fetchMetarsInBox, metarAgeMin, type Metar } from '../lib/metar';
 import { AIRPORT_TYPE_TEXT } from '../lib/data';
 import { KV_URL } from '../lib/offline';
+import { AIP_ROOT, chartMode, loadAipStatus } from '../lib/aipstatus';
 import { loadVfr, type VfrData, type VfrPoint, type VfrRoute } from '../lib/vfrdata';
 import { declination, fmtVar, trueToMag } from '../lib/mag';
 import { fmtDeg, runwayEnds } from '../lib/runway';
@@ -923,9 +924,20 @@ export function vfrChartLinks(ident: string): HTMLElement | null {
     'div',
     { class: 'p-charts' },
     h('div', { class: 'p-muted' }, `VFR: ${n} rapporteringspunkter${vfr!.routes.some((o) => o.ad === ident) ? ` · ${vfr!.routes.filter((o) => o.ad === ident).length} VFR-ruter på kartet` : ''}`),
-    list.map((c) => h('a', { href: c.url, target: '_blank', rel: 'noopener', class: 'p-chartlink' }, `📄 ${c.title}`)),
+    chartsDirect
+      ? list.map((c) => h('a', { href: c.url, target: '_blank', rel: 'noopener', class: 'p-chartlink' }, `📄 ${c.title}`))
+      : [
+          h('div', { class: 'warnbox small' }, `Avinor har trolig publisert en ny AIP-utgave (appen har ${vfr!.edition}). Kartene åpnes via AIP Norge til appen er oppdatert: velg AD 2 → ${ident} → kart.`),
+          h('a', { href: AIP_ROOT, target: '_blank', rel: 'noopener', class: 'p-chartlink' }, `📄 Åpne AIP Norge (gjeldende utgave)`),
+        ],
   );
 }
+
+/** Kartlenkene peker til én bestemt AIP-utgave – sjekkes ved oppstart mot AIP-status. */
+let chartsDirect = true;
+void Promise.all([loadVfr(), loadAipStatus()]).then(([d, st]) => {
+  chartsDirect = chartMode(d?.edition, st) === 'direct';
+});
 
 /** Nærmeste VFR-punkt (inkl. venteområder) til en posisjon, innen 3 km. */
 function nearestVfrPoint(lat: number, lon: number, ad: string): VfrPoint | null {
